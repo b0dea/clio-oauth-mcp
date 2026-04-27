@@ -6,19 +6,19 @@
     "url": "https://github.com/oktopeak/clio-mcp",
     "source": "github"
   },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@oktopeak/clio-mcp",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "CLIO_CLIENT_ID",
-          "description": "Client ID from your Clio developer application (Settings → Developer Applications)",
+          "description": "Client ID from your Clio developer application (Settings \u2192 Developer Applications)",
           "isRequired": true,
           "format": "string",
           "isSecret": false
