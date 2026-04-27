@@ -217,7 +217,7 @@ Claude selects and calls these tools automatically based on your questions. You 
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_documents` | `matter_id` or `folder_id`, `limit` | Lists documents in a matter or folder |
+| `list_documents` | `matter_id` or `parent_id`, `limit` | Lists documents in a matter or folder |
 | `get_document` | `document_id` | Returns document metadata and a direct download URL |
 
 ### Tasks (2 tools)
@@ -231,7 +231,7 @@ Claude selects and calls these tools automatically based on your questions. You 
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_calendar_entries` | `start_date`, `end_date` | Lists calendar entries within a date range |
+| `list_calendar_entries` | `from`, `to` | Lists calendar entries within a date range (YYYY-MM-DD) |
 
 ### Time entries (1 tool)
 

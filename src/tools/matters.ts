@@ -16,7 +16,7 @@ export function registerMatterTools(server: McpServer): void {
       description: "List matters from the connected Clio account",
       inputSchema: {
         status: z.enum(["Open", "Pending", "Closed"]).optional().describe("Filter by matter status"),
-        limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1–200)"),
+        limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1-200)"),
       },
     },
     async ({ status, limit }) => {

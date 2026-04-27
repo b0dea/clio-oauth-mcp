@@ -5,7 +5,7 @@ import { appendAuditLog } from "../utils/auditLog.js";
 
 const TASK_FIELDS = "id,name,priority,due_at,status,assignee{id,name},matter{id,display_number},reminders{id,notification_method}";
 
-const STATUS_MAP: Record<string, string> = { Pending: "incomplete", Complete: "complete" };
+const STATUS_MAP: Record<string, string> = { Pending: "pending", Complete: "complete", "In Progress": "in_progress", "In Review": "in_review", "Draft": "draft" };
 
 export function registerTaskTools(server: McpServer): void {
   server.registerTool(
@@ -14,7 +14,7 @@ export function registerTaskTools(server: McpServer): void {
       description: "List tasks from Clio with optional filters",
       inputSchema: {
         matter_id: z.number().int().positive().optional().describe("Filter tasks by matter ID"),
-        status: z.enum(["Pending", "Complete"]).optional().describe("Filter by task status"),
+        status: z.enum(["Pending", "Complete", "In Progress", "In Review", "Draft"]).optional().describe("Filter by task status"),
         due_date_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("ISO date (YYYY-MM-DD) — tasks due on or after this date"),
         due_date_end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("ISO date (YYYY-MM-DD) — tasks due on or before this date"),
         limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1-200)"),
@@ -77,15 +77,17 @@ export function registerTaskTools(server: McpServer): void {
       inputSchema: {
         matter_id: z.number().int().positive().describe("Matter ID to associate the task with"),
         name: z.string().min(1).describe("Task name / description"),
+        description: z.string().min(2).describe("Detailed description of the task"),
         priority: z.enum(["High", "Normal", "Low"]).default("Normal").describe("Task priority"),
         due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("ISO date (YYYY-MM-DD) when the task is due"),
         assignee_id: z.number().int().positive().optional().describe("Clio user ID to assign the task to"),
       },
     },
-    async ({ matter_id, name, priority, due_date, assignee_id }) => {
+    async ({ matter_id, name, description, priority, due_date, assignee_id }) => {
       try {
         const taskData: Record<string, unknown> = {
           name,
+          description,
           priority,
           matter: { id: matter_id },
         };

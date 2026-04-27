@@ -15,14 +15,14 @@ export function registerDocumentTools(server: McpServer): void {
       description: "List documents in Clio, filtered by matter or folder",
       inputSchema: {
         matter_id: z.number().int().positive().optional().describe("Filter documents by matter ID"),
-        folder_id: z.number().int().positive().optional().describe("Filter documents by folder ID"),
-        limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1–200)"),
+        parent_id: z.number().int().positive().optional().describe("Filter documents by parent ID (folder)"),
+        limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1-200)"),
       },
     },
-    async ({ matter_id, folder_id, limit }) => {
-      if (!matter_id && !folder_id) {
+    async ({ matter_id, parent_id, limit }) => {
+      if (!matter_id && !parent_id) {
         return {
-          content: [{ type: "text", text: "Error: either matter_id or folder_id is required" }],
+          content: [{ type: "text", text: "Error: either matter_id or parent_id is required" }],
           isError: true,
         };
       }
@@ -30,14 +30,14 @@ export function registerDocumentTools(server: McpServer): void {
       try {
         const params: Record<string, string> = { fields: DOCUMENT_LIST_FIELDS, limit: String(limit) };
         if (matter_id) params["matter_id"] = String(matter_id);
-        if (folder_id) params["folder_id"] = String(folder_id);
+        if (parent_id) params["parent_id"] = String(parent_id);
 
         const data = await clioGet("/documents.json", params);
         const docs = data.data as any[];
 
         await appendAuditLog({
           tool: "list_documents",
-          args: { matter_id, folder_id, limit },
+          args: { matter_id, parent_id, limit },
           outcome: "success",
           result_count: docs?.length ?? 0,
           ...(matter_id && { matter_id }),
@@ -60,7 +60,7 @@ export function registerDocumentTools(server: McpServer): void {
       } catch (err: any) {
         await appendAuditLog({
           tool: "list_documents",
-          args: { matter_id, folder_id, limit },
+          args: { matter_id, parent_id, limit },
           outcome: "error",
           error_message: err.message,
           ...(matter_id && { matter_id }),

@@ -14,7 +14,7 @@ export function registerActivityTools(server: McpServer): void {
         matter_id: z.number().int().positive().optional().describe("Filter by matter ID"),
         start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("ISO date (YYYY-MM-DD) — entries on or after this date"),
         end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("ISO date (YYYY-MM-DD) — entries on or before this date"),
-        limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1–200)"),
+        limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1-200)"),
       },
     },
     async ({ matter_id, start_date, end_date, limit }) => {
