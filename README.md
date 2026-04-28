@@ -10,6 +10,71 @@ Open-source Model Context Protocol (MCP) connector that lets Claude read live da
 
 ---
 
+## Compliance & Security
+
+This section exists because law firms evaluating AI tools have asked the right questions. Here are direct answers.
+
+### ABA Formal Opinion 512 — AI and competence
+
+ABA Opinion 512 (2023) requires attorneys using AI tools to understand how those tools work, supervise their outputs, and maintain confidentiality of client information. This connector is designed with those obligations in mind:
+
+- **Audit log.** Every tool call — every time Claude queries Clio on your behalf — is appended to a local log file at `~/.clio-mcp/audit.log`. Each entry records the timestamp, which tool was invoked, what arguments were passed, whether it succeeded, and the Clio user ID. The log is stored on your machine, not in any cloud service. It is append-only and never purged by the software, so your firm retains a complete record of AI-initiated data access.
+
+- **No data retention by the connector.** The connector does not store matter data, client names, or any Clio content. It fetches from the API and passes results to Claude. The only thing persisted locally is your authentication token, and that is encrypted (see below).
+
+- **Scope limited to tasks and notes.** The connector can create tasks and notes on matters. It cannot create, edit, or delete matters, contacts, documents, calendar entries, or billing records. This is a deliberate v1 design choice — write access is limited to the two operations most useful for AI-assisted legal work while minimising liability.
+
+### Token security — encryption at rest
+
+Your OAuth credentials are never stored in plain text. After you authenticate, the connector encrypts your access token and refresh token using **AES-256-GCM** — the same standard used by financial institutions — and writes the ciphertext to `~/.clio-mcp/tokens.enc`. The encryption key is a secret you generate yourself (instructions below) and is never transmitted anywhere.
+
+If someone obtained the token file without the key, they would not be able to read it.
+
+### OAuth 2.0 — no passwords stored
+
+Authentication uses Clio's standard OAuth 2.0 flow. You log in through your browser on Clio's own login page. The connector never sees or handles your Clio password. CSRF protection is implemented via a cryptographic state parameter on every auth request.
+
+### Local-first architecture
+
+The connector runs entirely on your machine. There is no Clio MCP cloud service, no relay server, no third party in the middle. Your Clio API traffic goes directly from your device to Clio's servers.
+
+---
+
+## Trust Model
+
+Three questions practitioners evaluating an AI tool for sensitive legal work should ask before installing.
+
+### Which Claude tier should we use?
+
+The connector secures the transport between Clio and Claude. It does NOT change what Claude itself does with data once data enters a conversation. **Claude's data handling depends on the tier you use, not on this connector.**
+
+- **Claude Enterprise / Team** — explicit no-training guarantees, optional zero-data-retention (ZDR). **This is the tier we recommend for any work involving privileged client data.**
+- **Claude API with ZDR** — for firms with engineering resources who want full control. Same no-training, no-retention guarantees.
+- **Claude Pro / Max (consumer)** — Anthropic does not train on consumer chat data by default and human review for safety is limited. Acceptable for non-privileged exploration. **Not a substitute for an enterprise deployment when handling client matter data.**
+
+If you are deploying this connector at a firm, pair it with Claude Enterprise (or API + ZDR). If you are an individual lawyer testing it on personal or non-privileged data, Claude Pro is reasonable for the testing phase but should not become the long-term setup for client work.
+
+### Supply-chain trust (npm package)
+
+The connector ships as `@oktopeak/clio-mcp` on npm. Like every npm package, the published version can be updated at any time by the maintainer. Standard hygiene applies:
+
+- **Pin versions in production.** Use `@oktopeak/clio-mcp@1.0.1` rather than `^1.0.0`. Audit before upgrading.
+- **Review the diff.** Every release is a tagged commit on GitHub. Verify changes before pulling a new version into a firm-wide deployment.
+- **Build from source.** If your firm requires it, clone the repo, audit the code, run from your own build artifact. We do not gate any feature behind the npm distribution.
+- **Maintainers.** Published by [Oktopeak](https://oktopeak.com) — a public team with public commits and a public npm publisher account. Not anonymous. We respond to security reports at `office@oktopeak.com`.
+
+### What is encrypted, what is not
+
+To pre-empt a common misread:
+
+- **OAuth tokens** (your Clio access + refresh token) are encrypted with AES-256-GCM at rest in `~/.clio-mcp/tokens.enc`. They cannot be read without the encryption key.
+- **The encryption key itself** is a 64-character hex string you generate and place in your environment (`.env` file or shell config). It lives on the filesystem in plaintext, protected by OS file permissions. This is standard for developer-machine secrets but is not the strongest possible posture for firm-wide deployment.
+- **Audit log entries** at `~/.clio-mcp/audit.log` are not encrypted. They contain metadata (timestamps, tool names, parameters with secrets redacted) — not Clio content.
+
+For higher-rigor deployments, we are tracking **OS-keychain integration** as v0.2: the encryption key would move into macOS Keychain, Linux secret-service, or Windows Credential Manager instead of the filesystem. Track issue #1 on the repo for progress.
+
+---
+
 ## What you can do
 
 Once connected, you can ask Claude things like:
@@ -52,36 +117,6 @@ The connector retrieves live data from Clio on every request. Nothing is cached 
 
 ---
 
-## Compliance & Security
-
-This section exists because law firms evaluating AI tools have asked the right questions. Here are direct answers.
-
-### ABA Formal Opinion 512 — AI and competence
-
-ABA Opinion 512 (2023) requires attorneys using AI tools to understand how those tools work, supervise their outputs, and maintain confidentiality of client information. This connector is designed with those obligations in mind:
-
-- **Audit log.** Every tool call — every time Claude queries Clio on your behalf — is appended to a local log file at `~/.clio-mcp/audit.log`. Each entry records the timestamp, which tool was invoked, what arguments were passed, whether it succeeded, and the Clio user ID. The log is stored on your machine, not in any cloud service. It is append-only and never purged by the software, so your firm retains a complete record of AI-initiated data access.
-
-- **No data retention by the connector.** The connector does not store matter data, client names, or any Clio content. It fetches from the API and passes results to Claude. The only thing persisted locally is your authentication token, and that is encrypted (see below).
-
-- **Scope limited to tasks and notes.** The connector can create tasks and notes on matters. It cannot create, edit, or delete matters, contacts, documents, calendar entries, or billing records. This is a deliberate v1 design choice — write access is limited to the two operations most useful for AI-assisted legal work while minimising liability.
-
-### Token security — encryption at rest
-
-Your OAuth credentials are never stored in plain text. After you authenticate, the connector encrypts your access token and refresh token using **AES-256-GCM** — the same standard used by financial institutions — and writes the ciphertext to `~/.clio-mcp/tokens.enc`. The encryption key is a secret you generate yourself (instructions below) and is never transmitted anywhere.
-
-If someone obtained the token file without the key, they would not be able to read it.
-
-### OAuth 2.0 — no passwords stored
-
-Authentication uses Clio's standard OAuth 2.0 flow. You log in through your browser on Clio's own login page. The connector never sees or handles your Clio password. CSRF protection is implemented via a cryptographic state parameter on every auth request.
-
-### Local-first architecture
-
-The connector runs entirely on your machine. There is no Clio MCP cloud service, no relay server, no third party in the middle. Your Clio API traffic goes directly from your device to Clio's servers.
-
----
-
 ## Requirements
 
 Before you begin, make sure you have:
@@ -94,7 +129,9 @@ Before you begin, make sure you have:
 
 ## Setup
 
-Takes about five minutes if Node.js and Claude Desktop are already installed. Add another five to ten minutes if you need to install them first.
+Setup is a one-time configuration. You will register a Clio Developer App, generate a 64-character encryption key, and add a JSON block to your Claude Desktop config. Plan 10-15 minutes the first time. Subsequent reinstalls take a few minutes.
+
+Before you run any of this in production, read the [Compliance & Security](#compliance--security) and [Trust Model](#trust-model) sections above. If you are deploying for a firm, pair the connector with Claude Enterprise or the Claude API with ZDR — see "Which Claude tier should we use?" above.
 
 ### Step 1 — Clone and build
 
