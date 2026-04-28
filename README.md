@@ -75,6 +75,20 @@ For higher-rigor deployments, we are tracking **OS-keychain integration** as v0.
 
 ---
 
+## Running with a local model (no third-party processor)
+
+After the SDNY ruling in [*United States v. Heppner*](https://harvardlawreview.org/blog/2026/03/united-states-v-heppner/) (Feb 2026) that consumer Claude is not protected by attorney-client privilege, some firms want a deployment with **no third-party AI processor at all** — model inference running entirely on the firm's own hardware.
+
+This connector supports that out of the box. MCP is a protocol, not a Claude-specific feature. The same connector that talks to Claude Desktop also talks to:
+
+- **[LM Studio](https://lmstudio.ai)** running Llama 4 70B / DeepSeek V4 / Mistral Large locally — recommended primary path
+- **[Continue.dev](https://continue.dev)** + [Ollama](https://ollama.com) + a bridge ([`mcphost`](https://github.com/mark3labs/mcphost) or [`ollama-mcp-bridge`](https://github.com/patruff/ollama-mcp-bridge))
+- Any other MCP-compatible client
+
+Full deployment guide and example configs in [`docs/privilege-stack/`](docs/privilege-stack/). Strategic context (when this beats Claude Enterprise, hardware spec, validation steps) in our [Privilege Stack blog post](https://oktopeak.com/blog/privilege-stack-on-prem-legal-ai/).
+
+---
+
 ## What you can do
 
 Once connected, you can ask Claude things like:

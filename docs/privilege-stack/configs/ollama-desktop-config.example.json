@@ -1,0 +1,17 @@
+{
+  "_comment": "mcphost servers.json example. Used with mcphost (https://github.com/mark3labs/mcphost), the Go-based MCP host that bridges between Ollama and MCP servers. Save to ~/.config/mcphost/servers.json. Run with: mcphost -m ollama:llama4:70b --config ~/.config/mcphost/servers.json. Requires Ollama running locally on port 11434 and a 70B model pulled. Replace REPLACE_WITH_* values.",
+
+  "mcpServers": {
+    "clio": {
+      "command": "npx",
+      "args": ["-y", "@oktopeak/clio-mcp"],
+      "env": {
+        "CLIO_CLIENT_ID": "REPLACE_WITH_YOUR_CLIO_CLIENT_ID",
+        "CLIO_CLIENT_SECRET": "REPLACE_WITH_YOUR_CLIO_CLIENT_SECRET",
+        "ENCRYPTION_KEY": "REPLACE_WITH_64_CHAR_HEX_KEY",
+        "CLIO_REGION": "us",
+        "CLIO_REDIRECT_PORT": "5678"
+      }
+    }
+  }
+}

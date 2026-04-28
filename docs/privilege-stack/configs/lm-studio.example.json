@@ -1,0 +1,17 @@
+{
+  "_comment": "LM Studio mcp.json example for Clio MCP. Open LM Studio Settings, navigate to MCP, paste this configuration. Replace the env values with your own. Encryption key: generate with 'node -e \"console.log(require(\\u0027crypto\\u0027).randomBytes(32).toString(\\u0027hex\\u0027))\"' once and reuse. Tested with LM Studio v0.4.11 (April 2026) on macOS. CLIO_REGION accepts 'us' (default), 'eu', or 'ca'.",
+
+  "mcpServers": {
+    "clio": {
+      "command": "npx",
+      "args": ["-y", "@oktopeak/clio-mcp"],
+      "env": {
+        "CLIO_CLIENT_ID": "REPLACE_WITH_YOUR_CLIO_CLIENT_ID",
+        "CLIO_CLIENT_SECRET": "REPLACE_WITH_YOUR_CLIO_CLIENT_SECRET",
+        "ENCRYPTION_KEY": "REPLACE_WITH_64_CHAR_HEX_KEY",
+        "CLIO_REGION": "us",
+        "CLIO_REDIRECT_PORT": "5678"
+      }
+    }
+  }
+}

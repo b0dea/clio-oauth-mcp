@@ -1,0 +1,50 @@
+{
+  "_comment": "Continue.dev config example for Clio MCP plus a local Ollama model. Save this to ~/.continue/config.json (or use Continue's settings UI). Requires: Ollama running locally with a model pulled (e.g., 'ollama pull llama4:70b'), and our @oktopeak/clio-mcp installed via npm. Tested with Continue.dev VS Code extension and Ollama 0.6+ on macOS. Replace REPLACE_WITH_* values.",
+
+  "models": [
+    {
+      "title": "Llama 4 70B (local)",
+      "provider": "ollama",
+      "model": "llama4:70b",
+      "apiBase": "http://localhost:11434"
+    }
+  ],
+
+  "tabAutocompleteModel": {
+    "title": "Llama 4 Scout (autocomplete)",
+    "provider": "ollama",
+    "model": "llama4:scout",
+    "apiBase": "http://localhost:11434"
+  },
+
+  "mcpServers": {
+    "clio": {
+      "transport": {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["-y", "@oktopeak/clio-mcp"]
+      },
+      "env": {
+        "CLIO_CLIENT_ID": "REPLACE_WITH_YOUR_CLIO_CLIENT_ID",
+        "CLIO_CLIENT_SECRET": "REPLACE_WITH_YOUR_CLIO_CLIENT_SECRET",
+        "ENCRYPTION_KEY": "REPLACE_WITH_64_CHAR_HEX_KEY",
+        "CLIO_REGION": "us",
+        "CLIO_REDIRECT_PORT": "5678"
+      }
+    }
+  },
+
+  "contextProviders": [
+    { "name": "open" },
+    { "name": "diff" },
+    { "name": "terminal" },
+    { "name": "problems" },
+    { "name": "folder" },
+    { "name": "codebase" }
+  ],
+
+  "slashCommands": [
+    { "name": "edit", "description": "Edit selected code" },
+    { "name": "comment", "description": "Write comments for selected code" }
+  ]
+}
