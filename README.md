@@ -400,6 +400,16 @@ Fixed price, four to six weeks, ABA Opinion 512 compliant from day one.
 
 ---
 
+## Related projects
+
+If your firm uses **Filevine** instead of (or alongside) Clio, we ship the same kind of connector for it:
+
+- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 15 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
+- npm: [`@oktopeak/filevine-mcp`](https://www.npmjs.com/package/@oktopeak/filevine-mcp)
+- MCP Registry: `io.github.oktopeak/filevine-mcp`
+
+---
+
 ## Contributing
 
 Issues and pull requests welcome. If you run into a Clio API edge case this connector does not handle cleanly, open an issue with the scenario and an example request. If you want to add a tool that falls within the "read-only" v1 scope, send a PR.
