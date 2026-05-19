@@ -265,12 +265,14 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `list_documents` | `matter_id` or `parent_id`, `limit` | Lists documents in a matter or folder |
 | `get_document` | `document_id` | Returns document metadata and a direct download URL |
 
-### Tasks (2 tools)
+### Tasks (4 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_tasks` | `matter_id`, `status` (Pending/Complete), `due_date_start`, `due_date_end`, `limit` | Lists tasks with optional filters |
-| `create_task` | `matter_id`, `name`, `priority` (High/Normal/Low), `due_date`, `assignee_id` | Creates a task on a matter; priority defaults to Normal |
+| `list_tasks` | `matter_id`, `status` (Pending/Complete/In Progress/In Review/Draft), `due_date_start`, `due_date_end`, `limit` | Lists tasks with optional filters |
+| `create_task` | `matter_id`, `name`, `description`, `priority` (High/Normal/Low), `due_date`, `assignee_id` | Creates a task on a matter; priority defaults to Normal |
+| `update_task` | `task_id`, `name`, `description`, `priority`, `due_date`, `status`, `assignee_id` | Updates one or more fields on an existing task |
+| `complete_task` | `task_id` | Marks a task as complete |
 
 ### Calendar (1 tool)
 

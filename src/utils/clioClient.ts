@@ -83,3 +83,14 @@ export async function clioPost(path: string, body: unknown): Promise<any> {
   });
   return res.json();
 }
+
+export async function clioPatch(path: string, body: unknown): Promise<any> {
+  const token = await getValidAccessToken();
+  const url = new URL(`${getBase()}${path}`);
+  const res = await clioFetch(url.toString(), {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
