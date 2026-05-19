@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import z from "zod";
-import { clioGet, ClioApiError } from "../utils/clioClient.js";
+import { clioGet, clioPost, ClioApiError } from "../utils/clioClient.js";
 import { appendAuditLog } from "../utils/auditLog.js";
 
 const MATTER_LIST_FIELDS =
@@ -96,6 +96,85 @@ export function registerMatterTools(server: McpServer): void {
           return { content: [{ type: "text", text: `Matter ${matter_id} not found.` }] };
         }
         await appendAuditLog({ tool: "get_matter", args: { matter_id }, outcome: "error", error_message: err.message, matter_id });
+        return {
+          content: [{ type: "text", text: `Error: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "create_matter",
+    {
+      description: "Create a new matter in the connected Clio account",
+      inputSchema: {
+        client_id: z.number().int().positive().describe("Clio contact ID of the client for this matter"),
+        description: z.string().min(1).describe("Matter subject / description"),
+        practice_area_id: z.number().int().positive().optional().describe("Clio practice area ID"),
+        status: z.enum(["open", "pending", "closed"]).default("open").describe("Initial matter status"),
+        open_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Open date (YYYY-MM-DD); defaults to today if omitted"),
+        billable: z.boolean().default(true).describe("Whether this matter is billable (default true)"),
+        responsible_attorney_id: z.number().int().positive().optional().describe("Clio user ID of the responsible attorney"),
+        originating_attorney_id: z.number().int().positive().optional().describe("Clio user ID of the originating attorney"),
+        client_reference: z.string().optional().describe("External reference string for cross-linking with other systems"),
+      },
+    },
+    async ({ client_id, description, practice_area_id, status, open_date,
+             billable, responsible_attorney_id, originating_attorney_id, client_reference }) => {
+      try {
+        const matterData: Record<string, unknown> = {
+          client: { id: client_id },
+          description,
+          status,
+          billable,
+        };
+        if (practice_area_id) matterData["practice_area"] = { id: practice_area_id };
+        if (open_date) matterData["open_date"] = open_date;
+        if (responsible_attorney_id) matterData["responsible_attorney"] = { id: responsible_attorney_id };
+        if (originating_attorney_id) matterData["originating_attorney"] = { id: originating_attorney_id };
+        if (client_reference) matterData["client_reference"] = client_reference;
+
+        const data = await clioPost("/matters.json", { data: matterData });
+        const m = data.data;
+
+        await appendAuditLog({
+          tool: "create_matter",
+          args: { client_id, description, practice_area_id, status, open_date,
+                  billable, responsible_attorney_id, originating_attorney_id, client_reference },
+          outcome: "success",
+          matter_id: m.id,
+        });
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              matter: {
+                id: m.id,
+                display_number: m.display_number,
+                description: m.description,
+                status: m.status,
+                billable: m.billable ?? billable,
+                client: m.client ? { id: m.client.id, name: m.client.name } : null,
+                practice_area: m.practice_area ? { id: m.practice_area.id, name: m.practice_area.name } : null,
+                responsible_attorney: m.responsible_attorney ? { id: m.responsible_attorney.id, name: m.responsible_attorney.name } : null,
+                originating_attorney: m.originating_attorney ? { id: m.originating_attorney.id, name: m.originating_attorney.name } : null,
+                client_reference: m.client_reference ?? client_reference ?? null,
+                open_date: m.open_date,
+              },
+            }, null, 2),
+          }],
+        };
+      } catch (err: any) {
+        await appendAuditLog({
+          tool: "create_matter",
+          args: { client_id, description, practice_area_id, status, open_date,
+                  billable, responsible_attorney_id, originating_attorney_id, client_reference },
+          outcome: "error",
+          error_message: err.message,
+        });
         return {
           content: [{ type: "text", text: `Error: ${err.message}` }],
           isError: true,
