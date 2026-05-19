@@ -34,3 +34,6 @@ coverage/
 *.pid
 
 tokens.enc
+
+.claude/
+CLAUDE.md
