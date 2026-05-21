@@ -71,7 +71,7 @@ export function registerActivityTools(server: McpServer): void {
   server.registerTool(
     "log_time_entry",
     {
-      description: "Create a new billable (or non-billable) time entry on a Clio matter",
+      description: "Create a new billable (or non-billable) time entry on a Clio matter. Use for time entries only; for expenses, hard costs, or soft costs use create_activity.",
       inputSchema: {
         matter_id: z.number().int().positive().describe("Matter ID to log time against"),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("ISO date (YYYY-MM-DD) when work was performed"),
@@ -104,7 +104,7 @@ export function registerActivityTools(server: McpServer): void {
 
         await appendAuditLog({
           tool: "log_time_entry",
-          args: { matter_id, date, quantity_in_hours, note, user_id },
+          args: { matter_id, date, quantity_in_hours, note, price, non_billable, no_charge, activity_description_id, user_id },
           outcome: "success",
           matter_id,
         });
@@ -131,7 +131,7 @@ export function registerActivityTools(server: McpServer): void {
       } catch (err: any) {
         await appendAuditLog({
           tool: "log_time_entry",
-          args: { matter_id, date, quantity_in_hours, note, user_id },
+          args: { matter_id, date, quantity_in_hours, note, price, non_billable, no_charge, activity_description_id, user_id },
           outcome: "error",
           error_message: err.message,
           matter_id,
@@ -144,7 +144,7 @@ export function registerActivityTools(server: McpServer): void {
   server.registerTool(
     "create_activity",
     {
-      description: "Create a Clio activity — TimeEntry, ExpenseEntry, HardCostEntry, or SoftCostEntry",
+      description: "Create a Clio activity — TimeEntry, ExpenseEntry, HardCostEntry, or SoftCostEntry. For time entries on a matter, prefer log_time_entry.",
       inputSchema: {
         type: z.enum(["TimeEntry", "ExpenseEntry", "HardCostEntry", "SoftCostEntry"]).describe("Activity type"),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("ISO date (YYYY-MM-DD) when the activity occurred"),
@@ -161,6 +161,17 @@ export function registerActivityTools(server: McpServer): void {
       },
     },
     async ({ type, date, matter_id, note, quantity_in_hours, price, non_billable, no_charge, activity_description_id, user_id, reference, tax_setting }) => {
+      if (type === "TimeEntry" && quantity_in_hours === undefined) {
+        await appendAuditLog({
+          tool: "create_activity",
+          args: { type, date, matter_id, note, quantity_in_hours, price, non_billable, no_charge, activity_description_id, user_id },
+          outcome: "error",
+          error_message: "quantity_in_hours is required for TimeEntry",
+          ...(matter_id !== undefined && { matter_id }),
+        });
+        return { content: [{ type: "text", text: "Error: quantity_in_hours is required for TimeEntry" }], isError: true };
+      }
+
       try {
         const activityData: Record<string, unknown> = { type, date };
         if (matter_id !== undefined)               activityData["matter"] = { id: matter_id };
@@ -179,7 +190,7 @@ export function registerActivityTools(server: McpServer): void {
 
         await appendAuditLog({
           tool: "create_activity",
-          args: { type, date, matter_id, note, user_id },
+          args: { type, date, matter_id, note, quantity_in_hours, price, non_billable, no_charge, activity_description_id, user_id },
           outcome: "success",
           ...(matter_id !== undefined && { matter_id }),
         });
@@ -207,7 +218,7 @@ export function registerActivityTools(server: McpServer): void {
       } catch (err: any) {
         await appendAuditLog({
           tool: "create_activity",
-          args: { type, date, matter_id, note, user_id },
+          args: { type, date, matter_id, note, quantity_in_hours, price, non_billable, no_charge, activity_description_id, user_id },
           outcome: "error",
           error_message: err.message,
           ...(matter_id !== undefined && { matter_id }),
