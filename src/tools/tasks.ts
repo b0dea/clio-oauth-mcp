@@ -91,7 +91,7 @@ export function registerTaskTools(server: McpServer): void {
           priority,
           matter: { id: matter_id },
         };
-        if (due_date) taskData["due_at"] = `${due_date}T00:00:00Z`;
+        if (due_date) taskData["due_at"] = `${due_date}T00:00:00Z`; // midnight UTC — consistent with calendar tool convention
         if (assignee_id) taskData["assignee"] = { id: assignee_id, type: "User" };
 
         const data = await clioPost("/tasks.json", { data: taskData });
@@ -164,7 +164,7 @@ export function registerTaskTools(server: McpServer): void {
 
         await appendAuditLog({
           tool: "update_task",
-          args: { task_id, name, priority, due_date, status, assignee_id },
+          args: { task_id, name, description, priority, due_date, status, assignee_id },
           outcome: "success",
           ...(task.matter?.id && { matter_id: task.matter.id }),
         });
@@ -188,7 +188,7 @@ export function registerTaskTools(server: McpServer): void {
       } catch (err: any) {
         await appendAuditLog({
           tool: "update_task",
-          args: { task_id, name, priority, due_date, status, assignee_id },
+          args: { task_id, name, description, priority, due_date, status, assignee_id },
           outcome: "error",
           error_message: err.message,
         });
@@ -207,7 +207,7 @@ export function registerTaskTools(server: McpServer): void {
     },
     async ({ task_id }) => {
       try {
-        const data = await clioPatch(`/tasks/${task_id}.json`, { data: { status: "complete" } });
+        const data = await clioPatch(`/tasks/${task_id}.json`, { data: { status: STATUS_MAP["Complete"] } });
         const task = data.data;
 
         await appendAuditLog({
