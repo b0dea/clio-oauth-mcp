@@ -6,12 +6,12 @@
     "url": "https://github.com/oktopeak/clio-mcp",
     "source": "github"
   },
-  "version": "1.0.1",
+  "version": "1.1.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@oktopeak/clio-mcp",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "transport": {
         "type": "stdio"
       },
@@ -32,8 +32,8 @@
         },
         {
           "name": "ENCRYPTION_KEY",
-          "description": "64-character hex key for encrypting stored OAuth tokens (generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\")",
-          "isRequired": true,
+          "description": "Optional. Leave unset to auto-generate a key stored in the OS keychain (or ~/.clio-mcp/key.hex as fallback on headless Linux/WSL2). If set, must be a 64-character hex string — it will be migrated to the OS keychain on first use.",
+          "isRequired": false,
           "format": "string",
           "isSecret": true
         },
