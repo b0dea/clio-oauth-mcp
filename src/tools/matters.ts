@@ -15,7 +15,7 @@ export function registerMatterTools(server: McpServer): void {
     {
       description: "List matters from the connected Clio account",
       inputSchema: {
-        status: z.enum(["Open", "Pending", "Closed"]).optional().describe("Filter by matter status"),
+        status: z.enum(["open", "pending", "closed"]).optional().describe("Filter by matter status"),
         limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1-200)"),
       },
     },
@@ -113,7 +113,7 @@ export function registerMatterTools(server: McpServer): void {
         description: z.string().min(1).describe("Matter subject / description"),
         practice_area_id: z.number().int().positive().optional().describe("Clio practice area ID"),
         status: z.enum(["open", "pending", "closed"]).default("open").describe("Initial matter status"),
-        open_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Open date (YYYY-MM-DD); defaults to today if omitted"),
+        open_date: z.string().date().optional().describe("Open date (YYYY-MM-DD); defaults to today if omitted"),
         billable: z.boolean().default(true).describe("Whether this matter is billable (default true)"),
         responsible_attorney_id: z.number().int().positive().optional().describe("Clio user ID of the responsible attorney"),
         originating_attorney_id: z.number().int().positive().optional().describe("Clio user ID of the originating attorney"),
@@ -128,9 +128,9 @@ export function registerMatterTools(server: McpServer): void {
           description,
           status,
           billable,
+          open_date: open_date ?? new Date().toISOString().split("T")[0],
         };
         if (practice_area_id) matterData["practice_area"] = { id: practice_area_id };
-        if (open_date) matterData["open_date"] = open_date;
         if (responsible_attorney_id) matterData["responsible_attorney"] = { id: responsible_attorney_id };
         if (originating_attorney_id) matterData["originating_attorney"] = { id: originating_attorney_id };
         if (client_reference) matterData["client_reference"] = client_reference;
@@ -168,13 +168,16 @@ export function registerMatterTools(server: McpServer): void {
           }],
         };
       } catch (err: any) {
-        await appendAuditLog({
-          tool: "create_matter",
-          args: { client_id, description, practice_area_id, status, open_date,
-                  billable, responsible_attorney_id, originating_attorney_id, client_reference },
-          outcome: "error",
-          error_message: err.message,
-        });
+        const auditArgs = { client_id, description, practice_area_id, status, open_date,
+                            billable, responsible_attorney_id, originating_attorney_id, client_reference };
+        if (err instanceof ClioApiError && err.statusCode === 422) {
+          await appendAuditLog({ tool: "create_matter", args: auditArgs, outcome: "error", error_message: err.message });
+          return {
+            content: [{ type: "text", text: `Validation error: ${err.message}` }],
+            isError: true,
+          };
+        }
+        await appendAuditLog({ tool: "create_matter", args: auditArgs, outcome: "error", error_message: err.message });
         return {
           content: [{ type: "text", text: `Error: ${err.message}` }],
           isError: true,
