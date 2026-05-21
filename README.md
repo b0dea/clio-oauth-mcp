@@ -2,7 +2,7 @@
 
 Open-source Model Context Protocol (MCP) connector that lets Claude read live data from [Clio](https://www.clio.com) — matters, contacts, documents, tasks, calendar, and billing — without copying client information into chat windows. Built for law firms that care about attorney-client privilege, ABA Opinion 512 compliance, and keeping AI workflows inside their existing practice management stack.
 
-> **TL;DR** — 16 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
+> **TL;DR** — 17 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
 
 **Who this is for:** Law firm IT, legal operations teams, tech-forward partners, and engineers at legal tech companies. If you can follow a five-step terminal install, you can use this.
 
@@ -395,7 +395,7 @@ Fixed price, four to six weeks, ABA Opinion 512 compliant from day one.
 
 If your firm uses **Filevine** instead of (or alongside) Clio, we ship the same kind of connector for it:
 
-- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 15 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
+- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 17 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
 - npm: [`@oktopeak/filevine-mcp`](https://www.npmjs.com/package/@oktopeak/filevine-mcp)
 - MCP Registry: `io.github.oktopeak/filevine-mcp`
 
