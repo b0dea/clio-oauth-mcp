@@ -4,7 +4,7 @@ Open-source Model Context Protocol (MCP) connector that lets Claude read live da
 
 > **TL;DR** — 15 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
 
-**Who this is for:** Law firm IT, legal operations teams, tech-forward partners, and engineers at legal tech companies. If you can follow a six-step terminal install, you can use this.
+**Who this is for:** Law firm IT, legal operations teams, tech-forward partners, and engineers at legal tech companies. If you can follow a five-step terminal install, you can use this.
 
 **Who this is NOT for (yet):** Attorneys who've never opened a terminal. A simpler one-command installer is planned for v0.2. In the meantime, ask your IT person to run the setup below — or have our team deploy it for you ([oktopeak.com/services/legal-ai-integration/](https://oktopeak.com/services/legal-ai-integration/)).
 
@@ -34,7 +34,7 @@ ABA Opinion 512 (2023) requires attorneys using AI tools to understand how those
 
 ### Token security — encryption at rest
 
-Your OAuth credentials are never stored in plain text. After you authenticate, the connector encrypts your access token and refresh token using **AES-256-GCM** — the same standard used by financial institutions — and writes the ciphertext to `~/.clio-mcp/tokens.enc`. The encryption key is a secret you generate yourself (instructions below) and is never transmitted anywhere.
+Your OAuth credentials are never stored in plain text. After you authenticate, the connector encrypts your access token and refresh token using **AES-256-GCM** — the same standard used by financial institutions — and writes the ciphertext to `~/.clio-mcp/tokens.enc`. The encryption key is auto-generated on first run and stored in your OS keychain (macOS Keychain, Windows Credential Manager, or Linux Secret Service) — never on the filesystem in plaintext.
 
 If someone obtained the token file without the key, they would not be able to read it.
 
@@ -76,10 +76,8 @@ The connector ships as `@oktopeak/clio-mcp` on npm. Like every npm package, the 
 To pre-empt a common misread:
 
 - **OAuth tokens** (your Clio access + refresh token) are encrypted with AES-256-GCM at rest in `~/.clio-mcp/tokens.enc`. They cannot be read without the encryption key.
-- **The encryption key itself** is a 64-character hex string you generate and place in your environment (`.env` file or shell config). It lives on the filesystem in plaintext, protected by OS file permissions. This is standard for developer-machine secrets but is not the strongest possible posture for firm-wide deployment.
+- **The encryption key itself** is auto-generated on first run and stored in the OS keychain (macOS Keychain, Windows Credential Manager, or Linux Secret Service). It never touches the filesystem in plaintext. For CI/headless installs without a keychain, you can override this by setting `ENCRYPTION_KEY` as a 64-character hex string in your environment.
 - **Audit log entries** at `~/.clio-mcp/audit.log` are not encrypted. They contain metadata (timestamps, tool names, parameters with secrets redacted) — not Clio content.
-
-For higher-rigor deployments, we are tracking **OS-keychain integration** as v0.2: the encryption key would move into macOS Keychain, Linux secret-service, or Windows Credential Manager instead of the filesystem. Track issue #1 on the repo for progress.
 
 ---
 
@@ -151,7 +149,7 @@ Before you begin, make sure you have:
 
 ## Setup
 
-Setup is a one-time configuration. You will register a Clio Developer App, generate a 64-character encryption key, and add a JSON block to your Claude Desktop config. Plan 10-15 minutes the first time. Subsequent reinstalls take a few minutes.
+Setup is a one-time configuration. You will register a Clio Developer App and add a JSON block to your Claude Desktop config. The encryption key is generated automatically on first run and stored in your OS keychain — no manual key generation required. Plan 10-15 minutes the first time. Subsequent reinstalls take a few minutes.
 
 Before you run any of this in production, read the [Compliance & Security](#compliance--security) and [Trust Model](#trust-model) sections above. If you are deploying for a firm, pair the connector with Claude Enterprise or the Claude API with ZDR — see "Which Claude tier should we use?" above.
 
@@ -166,7 +164,7 @@ npm install
 npm run build
 ```
 
-Note the full path to the folder you just cloned — you will need it in Step 4.
+Note the full path to the folder you just cloned — you will need it in Step 3.
 
 ```bash
 # On Mac/Linux, print the full path:
@@ -184,19 +182,7 @@ pwd
 5. Save the application
 6. Copy the **Client ID** and **Client Secret** — you will need them in the next step
 
-### Step 3 — Generate your encryption key
-
-This is a one-time password the connector uses to encrypt your Clio tokens on disk. You generate it on your own machine. It never leaves your laptop, and no one else ever sees it. If you lose it, you re-authenticate — nothing dangerous happens.
-
-In your terminal, run:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Copy the output. It will be a 64-character string of random letters and numbers. Paste it into a password manager or a safe note — you will use it in Step 4 and you will need it if you ever reconfigure the connector.
-
-### Step 4 — Configure Claude Desktop
+### Step 3 — Configure Claude Desktop
 
 Open your Claude Desktop configuration file:
 
@@ -222,11 +208,11 @@ If the file already has other MCP servers configured, add a comma after the last
 
 **Using Clio EU, Canada, or Australia?** Change `CLIO_API_BASE`, `CLIO_AUTH_URL`, and `CLIO_TOKEN_URL` to your regional Clio endpoints (for example, `https://eu.app.clio.com/...`). Contact Clio support if you are unsure which region your firm is on.
 
-### Step 5 — Restart Claude Desktop
+### Step 4 — Restart Claude Desktop
 
 Quit Claude Desktop completely and reopen it.
 
-### Step 6 — Authenticate with Clio
+### Step 5 — Authenticate with Clio
 
 In a new Claude conversation, type:
 
@@ -325,13 +311,13 @@ The connector also exposes two MCP resources — read-only content that compatib
 
 ## Configuration reference
 
-All settings are passed as environment variables in your Claude Desktop config (see Step 4). Only the first three are required.
+All settings are passed as environment variables in your Claude Desktop config (see Step 3). Only the first two are required; `ENCRYPTION_KEY` is auto-managed via the OS keychain.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `CLIO_CLIENT_ID` | Yes | — | Client ID from your Clio developer application |
 | `CLIO_CLIENT_SECRET` | Yes | — | Client Secret from your Clio developer application |
-| `ENCRYPTION_KEY` | Yes | — | 64-character hex key for encrypting stored tokens |
+| `ENCRYPTION_KEY` | No | auto-generated | Overrides OS keychain. Required only for CI/headless installs where no keychain is available. Must be a 64-character hex string. |
 | `CLIO_REDIRECT_PORT` | No | `5678` | Local port for the OAuth callback. Change if 5678 is in use on your machine |
 | `CLIO_API_BASE` | No | `https://app.clio.com/api/v4` | Override for Clio EU, Canada, or Australia (e.g., `https://eu.app.clio.com/api/v4`) |
 | `CLIO_AUTH_URL` | No | `https://app.clio.com/oauth/authorize` | OAuth authorization endpoint |
@@ -373,10 +359,10 @@ Restart Claude Desktop fully (quit, do not just close the window). If the proble
 Make sure the redirect URI in your Clio developer application is set to exactly `http://127.0.0.1:5678/callback`. No trailing slash, no `localhost` — it must be `127.0.0.1`.
 
 **"ENCRYPTION_KEY must be 64 hex chars" error**
-Regenerate the key using the command in Step 3. Paste the full output — it should be exactly 64 characters.
+This error appears when `ENCRYPTION_KEY` is set in your environment but has the wrong length. Either correct or remove the value — if removed, the connector will use the key stored in your OS keychain (or generate one on first run).
 
 **"Token file exists but decryption failed" warning**
-This appears if the encryption key in your config no longer matches the key that was used to encrypt the token file. Run the `logout` tool in Claude and then `authenticate` again. If you changed your `ENCRYPTION_KEY`, update it back to the original value, or log out first before changing it.
+This appears if the encryption key no longer matches the key used to encrypt the token file — for example, if the keychain entry was deleted, you switched machines, or you changed `ENCRYPTION_KEY`. Run the `logout` tool in Claude and then `authenticate` again to re-create the token file with the current key.
 
 **Port 5678 is already in use**
 Add `"CLIO_REDIRECT_PORT": "5679"` to the `env` block in your Claude Desktop config, and update your Clio application's redirect URI to `http://127.0.0.1:5679/callback`.

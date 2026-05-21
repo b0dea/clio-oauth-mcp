@@ -37,7 +37,7 @@ registerBillingTools(server);
 registerNoteTools(server);
 
 async function main() {
-    const missing = (["CLIO_CLIENT_ID", "CLIO_CLIENT_SECRET", "ENCRYPTION_KEY"] as const)
+    const missing = (["CLIO_CLIENT_ID", "CLIO_CLIENT_SECRET"] as const)
         .filter((k) => !process.env[k]);
     if (missing.length > 0) {
         console.error(`[startup] Fatal: missing required env var(s): ${missing.join(", ")}. Check your .env file.`);
