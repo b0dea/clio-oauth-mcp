@@ -1,6 +1,5 @@
 import crypto from "crypto";
 import fs from "fs/promises";
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import os from "os";
 import { Entry } from "@napi-rs/keyring";
@@ -14,7 +13,7 @@ const ALGORITHM = "aes-256-gcm";
 const KEYCHAIN_SERVICE = "clio-mcp";
 const KEYCHAIN_ACCOUNT = "encryption-key";
 
-function getEncryptionKey(): Buffer {
+export async function getEncryptionKey(): Promise<Buffer> {
   const envKey = process.env.ENCRYPTION_KEY;
 
   // 1. Env var override (CI/headless, backward compat)
@@ -48,14 +47,14 @@ function getEncryptionKey(): Buffer {
   }
 
   // 3. File fallback: ~/.clio-mcp/key.hex (mode 0600) — WSL2 / headless Linux
-  mkdirSync(TOKEN_DIR, { recursive: true });
+  await fs.mkdir(TOKEN_DIR, { recursive: true, mode: 0o700 });
   try {
-    return Buffer.from(readFileSync(KEY_FILE, "utf8").trim(), "hex");
+    return Buffer.from((await fs.readFile(KEY_FILE, "utf8")).trim(), "hex");
   } catch (err: any) {
     if (err.code !== "ENOENT") throw err;
   }
   const keyHex = crypto.randomBytes(32).toString("hex");
-  writeFileSync(KEY_FILE, keyHex, { mode: 0o600 });
+  await fs.writeFile(KEY_FILE, keyHex, { mode: 0o600 });
   console.error("[tokenStorage] OS keychain unavailable. Generated encryption key at ~/.clio-mcp/key.hex (mode 0600).");
   return Buffer.from(keyHex, "hex");
 }
@@ -63,7 +62,7 @@ function getEncryptionKey(): Buffer {
 export async function saveTokens(tokens: ClioTokens): Promise<void> {
   await fs.mkdir(TOKEN_DIR, { recursive: true });
 
-  const key = getEncryptionKey();
+  const key = await getEncryptionKey();
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
 
@@ -88,7 +87,7 @@ export async function loadTokens(): Promise<ClioTokens | null> {
   }
 
   try {
-    const key = getEncryptionKey();
+    const key = await getEncryptionKey();
     const iv = combined.subarray(0, 16);
     const authTag = combined.subarray(16, 32);
     const encrypted = combined.subarray(32);

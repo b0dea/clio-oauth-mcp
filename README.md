@@ -364,6 +364,9 @@ This error appears when `ENCRYPTION_KEY` is set in your environment but has the 
 **"Token file exists but decryption failed" warning**
 This appears if the encryption key no longer matches the key used to encrypt the token file — for example, if the keychain entry was deleted, you switched machines, or you changed `ENCRYPTION_KEY`. Run the `logout` tool in Claude and then `authenticate` again to re-create the token file with the current key.
 
+**Logout does not clear the keychain entry**
+The `logout` command removes your stored token file but not the encryption key from the OS keychain. For a complete credential wipe — for example, when transferring a machine — also remove the `clio-mcp / encryption-key` entry via your system's keychain manager: Keychain Access on macOS, Windows Credential Manager on Windows, or `secret-tool delete --label clio-mcp` on Linux.
+
 **Port 5678 is already in use**
 Add `"CLIO_REDIRECT_PORT": "5679"` to the `env` block in your Claude Desktop config, and update your Clio application's redirect URI to `http://127.0.0.1:5679/callback`.
 
