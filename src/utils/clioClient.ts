@@ -83,3 +83,10 @@ export async function clioPost(path: string, body: unknown): Promise<any> {
   });
   return res.json();
 }
+
+export function extractNextPageToken(meta: any): string | null {
+  const nextUrl = meta?.paging?.next;
+  if (!nextUrl) return null;
+  try { return new URL(nextUrl).searchParams.get("page_token"); }
+  catch { return null; }
+}

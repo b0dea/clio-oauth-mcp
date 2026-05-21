@@ -2,7 +2,7 @@
 
 Open-source Model Context Protocol (MCP) connector that lets Claude read live data from [Clio](https://www.clio.com) — matters, contacts, documents, tasks, calendar, and billing — without copying client information into chat windows. Built for law firms that care about attorney-client privilege, ABA Opinion 512 compliance, and keeping AI workflows inside their existing practice management stack.
 
-> **TL;DR** — 15 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
+> **TL;DR** — 26 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
 
 **Who this is for:** Law firm IT, legal operations teams, tech-forward partners, and engineers at legal tech companies. If you can follow a five-step terminal install, you can use this.
 
@@ -107,10 +107,12 @@ Once connected, you can ask Claude things like:
 **Contacts**
 - *"Find the contact details for Jane Smith"*
 - *"What's the email address and phone number for client ID 8821?"*
+- *"Show me all contacts matching 'Acme' — fetch the next page if there are more"*
 
 **Documents**
 - *"List all documents on matter 4821"*
 - *"Get the download link for document 9934"*
+- *"Find all documents named 'retainer' across all matters"*
 
 **Tasks**
 - *"What tasks are due this week on matter 4821?"*
@@ -255,14 +257,14 @@ Claude selects and calls these tools automatically based on your questions. You 
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `search_contacts` | `query`, `limit` | Searches contacts by name, email, or company |
+| `search_contacts` | `query`, `limit`, `page_token` | Searches contacts by name, email, or company; returns a paginated envelope with `total_count`, `has_more`, and `next_page_token` — pass the token back to fetch the next page |
 | `get_contact` | `contact_id` | Returns full detail for a specific contact including all emails, phone numbers, and addresses |
 
 ### Documents (2 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_documents` | `matter_id` or `parent_id`, `limit` | Lists documents in a matter or folder |
+| `list_documents` | `matter_id`, `parent_id`, `query`, `limit`, `page_token` | Lists or full-text searches documents; at least one of `matter_id`, `parent_id`, or `query` is required; returns a paginated envelope with `total_count`, `has_more`, and `next_page_token` |
 | `get_document` | `document_id` | Returns document metadata and a direct download URL |
 
 ### Tasks (2 tools)
