@@ -20,8 +20,8 @@ export function registerUserTools(server: McpServer): void {
           .describe("Filter to attorneys only or non-attorneys only"),
         enabled: z
           .boolean()
-          .default(true)
-          .describe("Return only enabled (active) accounts (default true)"),
+          .optional()
+          .describe("Return only enabled (active) accounts (omit to return all)"),
         limit: z.number().int().min(1).max(2000).default(200).describe("Max results to return (1-2000)"),
       },
     },
@@ -30,8 +30,8 @@ export function registerUserTools(server: McpServer): void {
         const params: Record<string, string> = {
           fields: USER_LIST_FIELDS,
           limit: String(limit),
-          enabled: String(enabled),
         };
+        if (enabled !== undefined) params.enabled = String(enabled);
         if (name) params.name = name;
         if (subscription_type) params.subscription_type = subscription_type;
 
@@ -100,7 +100,7 @@ export function registerUserTools(server: McpServer): void {
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err: any) {
         if (err instanceof ClioApiError && err.statusCode === 404) {
-          await appendAuditLog({ tool: "get_user", args: { user_id }, outcome: "success" });
+          await appendAuditLog({ tool: "get_user", args: { user_id }, outcome: "not_found", result_count: 0 });
           return { content: [{ type: "text", text: `User ${user_id} not found.` }] };
         }
         await appendAuditLog({ tool: "get_user", args: { user_id }, outcome: "error", error_message: err.message });
