@@ -30,7 +30,7 @@ ABA Opinion 512 (2023) requires attorneys using AI tools to understand how those
 
 - **No data retention by the connector.** The connector does not store matter data, client names, or any Clio content. It fetches from the API and passes results to Claude. The only thing persisted locally is your authentication token, and that is encrypted (see below).
 
-- **Scope limited to tasks and notes.** The connector can create tasks and notes on matters. It cannot create, edit, or delete matters, contacts, documents, calendar entries, or billing records. This is a deliberate v1 design choice — write access is limited to the two operations most useful for AI-assisted legal work while minimising liability.
+- **Scope limited to tasks, notes, and document uploads.** The connector can create tasks and notes on matters, and upload documents to matters. It cannot create, edit, or delete matters, contacts, calendar entries, or billing records. This is a deliberate v1 design choice — write access is limited to the operations most useful for AI-assisted legal work while minimising liability.
 
 ### Token security — encryption at rest
 
@@ -265,12 +265,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `search_contacts` | `query`, `limit` | Searches contacts by name, email, or company |
 | `get_contact` | `contact_id` | Returns full detail for a specific contact including all emails, phone numbers, and addresses |
 
-### Documents (2 tools)
+### Documents (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
 | `list_documents` | `matter_id` or `parent_id`, `limit` | Lists documents in a matter or folder |
 | `get_document` | `document_id` | Returns document metadata and a direct download URL |
+| `upload_document` | `file_path`, `matter_id`, `name`, `content_type` | Uploads a local file to a matter using Clio's multipart S3 upload flow |
 
 ### Tasks (4 tools)
 
