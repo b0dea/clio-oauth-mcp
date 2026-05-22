@@ -101,6 +101,8 @@ export function extractNextPageToken(meta: any): string | null {
   if (!nextUrl) return null;
   try { return new URL(nextUrl).searchParams.get("page_token"); }
   catch { return null; }
+}
+
 export async function clioPut(path: string, body: unknown): Promise<any> {
   const token = await getValidAccessToken();
   const url = new URL(`${getBase()}${path}`);

@@ -13,6 +13,7 @@ import { registerBillingTools } from "./tools/billing.js";
 import { registerNoteTools } from "./tools/notes.js";
 import { registerResources } from "./resources/index.js";
 import { registerUserTools } from "./tools/users.js";
+import { registerAuditExportTool } from "./tools/auditExport.js";
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -37,6 +38,7 @@ registerActivityTools(server);
 registerBillingTools(server);
 registerNoteTools(server);
 registerUserTools(server);
+registerAuditExportTool(server);
 
 async function main() {
     const missing = (["CLIO_CLIENT_ID", "CLIO_CLIENT_SECRET"] as const)
