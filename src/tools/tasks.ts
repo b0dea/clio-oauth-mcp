@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import z from "zod";
-import { clioGet, clioPost } from "../utils/clioClient.js";
+import { clioGet, clioPost, clioPatch } from "../utils/clioClient.js";
 import { appendAuditLog } from "../utils/auditLog.js";
 
 const TASK_FIELDS = "id,name,priority,due_at,status,assignee{id,name},matter{id,display_number},reminders{id,notification_method}";
@@ -91,7 +91,7 @@ export function registerTaskTools(server: McpServer): void {
           priority,
           matter: { id: matter_id },
         };
-        if (due_date) taskData["due_at"] = `${due_date}T00:00:00Z`;
+        if (due_date) taskData["due_at"] = `${due_date}T00:00:00Z`; // midnight UTC — consistent with calendar tool convention
         if (assignee_id) taskData["assignee"] = { id: assignee_id, type: "User" };
 
         const data = await clioPost("/tasks.json", { data: taskData });
@@ -126,6 +126,117 @@ export function registerTaskTools(server: McpServer): void {
           outcome: "error",
           error_message: err.message,
           matter_id,
+        });
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.registerTool(
+    "update_task",
+    {
+      description: "Update one or more fields on an existing Clio task",
+      inputSchema: {
+        task_id: z.number().int().positive().describe("ID of the task to update"),
+        name: z.string().min(1).optional().describe("New task name"),
+        description: z.string().optional().describe("New task description"),
+        priority: z.enum(["High", "Normal", "Low"]).optional().describe("New priority"),
+        due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("ISO date (YYYY-MM-DD) for due date"),
+        status: z.enum(["Pending", "Complete", "In Progress", "In Review", "Draft"]).optional().describe("New task status"),
+        assignee_id: z.number().int().positive().optional().describe("Clio user ID to reassign the task to"),
+      },
+    },
+    async ({ task_id, name, description, priority, due_date, status, assignee_id }) => {
+      if ([name, description, priority, due_date, status, assignee_id].every((v) => v === undefined)) {
+        return { content: [{ type: "text", text: "Error: at least one field to update must be provided" }], isError: true };
+      }
+      try {
+        const taskData: Record<string, unknown> = {};
+        if (name !== undefined) taskData["name"] = name;
+        if (description !== undefined) taskData["description"] = description;
+        if (priority !== undefined) taskData["priority"] = priority;
+        if (due_date !== undefined) taskData["due_at"] = `${due_date}T00:00:00Z`;
+        if (status !== undefined) taskData["status"] = STATUS_MAP[status];
+        if (assignee_id !== undefined) taskData["assignee"] = { id: assignee_id, type: "User" };
+
+        const data = await clioPatch(`/tasks/${task_id}.json`, { data: taskData });
+        const task = data.data;
+
+        await appendAuditLog({
+          tool: "update_task",
+          args: { task_id, name, description, priority, due_date, status, assignee_id },
+          outcome: "success",
+          ...(task.matter?.id && { matter_id: task.matter.id }),
+        });
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              task: {
+                id: task.id,
+                name: task.name,
+                priority: task.priority,
+                status: task.status,
+                due_date: task.due_at ? task.due_at.substring(0, 10) : null,
+                matter_id: task.matter?.id ?? null,
+              },
+            }, null, 2),
+          }],
+        };
+      } catch (err: any) {
+        await appendAuditLog({
+          tool: "update_task",
+          args: { task_id, name, description, priority, due_date, status, assignee_id },
+          outcome: "error",
+          error_message: err.message,
+        });
+        return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.registerTool(
+    "complete_task",
+    {
+      description: "Mark a Clio task as complete",
+      inputSchema: {
+        task_id: z.number().int().positive().describe("ID of the task to mark complete"),
+      },
+    },
+    async ({ task_id }) => {
+      try {
+        const data = await clioPatch(`/tasks/${task_id}.json`, { data: { status: STATUS_MAP["Complete"] } });
+        const task = data.data;
+
+        await appendAuditLog({
+          tool: "complete_task",
+          args: { task_id },
+          outcome: "success",
+          ...(task.matter?.id && { matter_id: task.matter.id }),
+        });
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              task: {
+                id: task.id,
+                name: task.name,
+                status: task.status,
+                completed_at: task.completed_at ?? null,
+              },
+            }, null, 2),
+          }],
+        };
+      } catch (err: any) {
+        await appendAuditLog({
+          tool: "complete_task",
+          args: { task_id },
+          outcome: "error",
+          error_message: err.message,
         });
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
       }
