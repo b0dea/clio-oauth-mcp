@@ -103,6 +103,7 @@ Once connected, you can ask Claude things like:
 - *"Show me all open matters for Acme Corp"*
 - *"What's the status of matter 2024-0042?"*
 - *"List my pending matters from the last quarter"*
+- *"Open a new matter for Acme Corp — litigation, responsible attorney John Smith"*
 
 **Contacts**
 - *"Find the contact details for Jane Smith"*
@@ -132,6 +133,11 @@ Once connected, you can ask Claude things like:
 **Billing**
 - *"What's the outstanding balance on matter 4821?"*
 - *"When was the last invoice issued for this matter?"*
+
+**Users**
+- *"List all attorneys in the firm"*
+- *"What's the user ID for Jane Smith?"*
+- *"Show me all staff members"*
 
 The connector retrieves live data from Clio on every request. Nothing is cached or stored by the AI.
 
@@ -244,12 +250,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `auth_status` | Shows whether you are currently authenticated and when your session expires |
 | `logout` | Clears your stored credentials from this machine |
 
-### Matters (2 tools)
+### Matters (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_matters` | `status` (Open/Pending/Closed), `limit` | Lists matters with optional status filter |
+| `list_matters` | `status` (open/pending/closed), `limit` | Lists matters with optional status filter |
 | `get_matter` | `matter_id` | Returns full detail for a specific matter |
+| `create_matter` | `client_id`, `description`, `status`, `open_date`, `practice_area_id`, `billable`, `responsible_attorney_id`, `originating_attorney_id`, `client_reference` | Creates a new matter; status defaults to Open, billable defaults to true |
 
 ### Contacts (2 tools)
 
@@ -280,11 +287,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 |---|---|---|
 | `list_calendar_entries` | `from`, `to` | Lists calendar entries within a date range (YYYY-MM-DD) |
 
-### Time entries (1 tool)
+### Time entries (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
 | `list_time_entries` | `matter_id`, `start_date`, `end_date`, `limit` | Lists billable time entries with optional filters |
+| `log_time_entry` | `matter_id`, `date`, `quantity_in_hours`, `note`, `price`, `non_billable`, `no_charge`, `activity_description_id`, `user_id` | Creates a new billable (or non-billable) time entry on a matter |
+| `create_activity` | `type`, `date`, `matter_id`, `note`, `quantity_in_hours`, `price`, `non_billable`, `no_charge`, `activity_description_id`, `user_id`, `reference`, `tax_setting` | Creates any Clio activity type — TimeEntry, ExpenseEntry, HardCostEntry, or SoftCostEntry |
 
 ### Billing (1 tool)
 
@@ -297,6 +306,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | Tool | Inputs | What it does |
 |---|---|---|
 | `create_note` | `matter_id`, `subject`, `body` | Creates a note on a matter; appears in Clio's matter timeline |
+
+### Users (2 tools)
+
+| Tool | Inputs | What it does |
+|---|---|---|
+| `list_users` | `name`, `subscription_type` (attorney/nonattorney), `enabled`, `limit` | Lists firm users with their IDs |
+| `get_user` | `user_id` | Returns detail for a single user by ID |
 
 ---
 
@@ -395,7 +411,7 @@ Fixed price, four to six weeks, ABA Opinion 512 compliant from day one.
 
 If your firm uses **Filevine** instead of (or alongside) Clio, we ship the same kind of connector for it:
 
-- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 15 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
+- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 17 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
 - npm: [`@oktopeak/filevine-mcp`](https://www.npmjs.com/package/@oktopeak/filevine-mcp)
 - MCP Registry: `io.github.oktopeak/filevine-mcp`
 
