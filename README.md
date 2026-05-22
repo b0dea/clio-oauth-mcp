@@ -103,6 +103,7 @@ Once connected, you can ask Claude things like:
 - *"Show me all open matters for Acme Corp"*
 - *"What's the status of matter 2024-0042?"*
 - *"List my pending matters from the last quarter"*
+- *"Open a new matter for Acme Corp — litigation, responsible attorney John Smith"*
 
 **Contacts**
 - *"Find the contact details for Jane Smith"*
@@ -249,12 +250,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `auth_status` | Shows whether you are currently authenticated and when your session expires |
 | `logout` | Clears your stored credentials from this machine |
 
-### Matters (2 tools)
+### Matters (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_matters` | `status` (Open/Pending/Closed), `limit` | Lists matters with optional status filter |
+| `list_matters` | `status` (open/pending/closed), `limit` | Lists matters with optional status filter |
 | `get_matter` | `matter_id` | Returns full detail for a specific matter |
+| `create_matter` | `client_id`, `description`, `status`, `open_date`, `practice_area_id`, `billable`, `responsible_attorney_id`, `originating_attorney_id`, `client_reference` | Creates a new matter; status defaults to Open, billable defaults to true |
 
 ### Contacts (2 tools)
 
@@ -405,7 +407,7 @@ Fixed price, four to six weeks, ABA Opinion 512 compliant from day one.
 
 If your firm uses **Filevine** instead of (or alongside) Clio, we ship the same kind of connector for it:
 
-- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 15 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
+- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 17 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
 - npm: [`@oktopeak/filevine-mcp`](https://www.npmjs.com/package/@oktopeak/filevine-mcp)
 - MCP Registry: `io.github.oktopeak/filevine-mcp`
 
