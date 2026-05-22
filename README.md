@@ -125,6 +125,8 @@ Once connected, you can ask Claude things like:
 **Calendar**
 - *"What do I have scheduled between April 28 and May 2?"*
 - *"List all calendar entries for next week"*
+- *"Show me my available calendars"*
+- *"Add a court hearing for matter 4821 on June 10 at 9am"*
 
 **Time entries**
 - *"How many hours have been logged on matter 4821 this month?"*
@@ -282,11 +284,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `update_task` | `task_id`, `name`, `description`, `priority`, `due_date`, `status`, `assignee_id` | Updates one or more fields on an existing task |
 | `complete_task` | `task_id` | Marks a task as complete |
 
-### Calendar (1 tool)
+### Calendar (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_calendar_entries` | `from`, `to` | Lists calendar entries within a date range (YYYY-MM-DD) |
+| `list_calendars` | none | Lists calendars the user can write to; use the returned `id` as `calendar_owner_id` when creating entries |
+| `list_calendar_entries` | `from`, `to` | Lists calendar entries within a date range (YYYY-MM-DD or YYYY-MM-DDTHH:MM) |
+| `create_calendar_entry` | `summary`, `start_at`, `end_at`, `calendar_owner_id`, `description`, `all_day`, `matter_id`, `location`, `send_email_notification`, `attendee_ids` | Creates a calendar entry (hearing, deadline, meeting); `start_at`/`end_at` accept date or datetime |
 
 ### Time entries (3 tools)
 
