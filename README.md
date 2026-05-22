@@ -285,11 +285,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 |---|---|---|
 | `list_calendar_entries` | `from`, `to` | Lists calendar entries within a date range (YYYY-MM-DD) |
 
-### Time entries (1 tool)
+### Time entries (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
 | `list_time_entries` | `matter_id`, `start_date`, `end_date`, `limit` | Lists billable time entries with optional filters |
+| `log_time_entry` | `matter_id`, `date`, `quantity_in_hours`, `note`, `price`, `non_billable`, `no_charge`, `activity_description_id`, `user_id` | Creates a new billable (or non-billable) time entry on a matter |
+| `create_activity` | `type`, `date`, `matter_id`, `note`, `quantity_in_hours`, `price`, `non_billable`, `no_charge`, `activity_description_id`, `user_id`, `reference`, `tax_setting` | Creates any Clio activity type — TimeEntry, ExpenseEntry, HardCostEntry, or SoftCostEntry |
 
 ### Billing (1 tool)
 
