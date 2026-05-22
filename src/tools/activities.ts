@@ -74,7 +74,7 @@ export function registerActivityTools(server: McpServer): void {
       description: "Create a new billable (or non-billable) time entry on a Clio matter. Use for time entries only; for expenses, hard costs, or soft costs use create_activity.",
       inputSchema: {
         matter_id: z.number().int().positive().describe("Matter ID to log time against"),
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("ISO date (YYYY-MM-DD) when work was performed"),
+        date: z.string().date().describe("ISO date (YYYY-MM-DD) when work was performed"),
         quantity_in_hours: z.number().positive().describe("Hours worked (e.g. 1.5 for 90 minutes)"),
         note: z.string().optional().describe("Description of work performed"),
         price: z.number().optional().describe("Hourly rate override; omit to use Clio rate hierarchy"),
@@ -147,7 +147,7 @@ export function registerActivityTools(server: McpServer): void {
       description: "Create a Clio activity — TimeEntry, ExpenseEntry, HardCostEntry, or SoftCostEntry. For time entries on a matter, prefer log_time_entry.",
       inputSchema: {
         type: z.enum(["TimeEntry", "ExpenseEntry", "HardCostEntry", "SoftCostEntry"]).describe("Activity type"),
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("ISO date (YYYY-MM-DD) when the activity occurred"),
+        date: z.string().date().describe("ISO date (YYYY-MM-DD) when the activity occurred"),
         matter_id: z.number().int().positive().optional().describe("Matter ID to associate with"),
         note: z.string().optional().describe("Description / details"),
         quantity_in_hours: z.number().positive().optional().describe("Hours (TimeEntry only); converted to seconds internally"),
