@@ -1,4 +1,11 @@
 import { getValidAccessToken } from "../auth/oauth.js";
+import { getSessionContext } from "./sessionContext.js";
+
+async function resolveAccessToken(): Promise<string> {
+  const ctx = getSessionContext();
+  if (ctx) return ctx.getAccessToken();
+  return getValidAccessToken();
+}
 
 export class ClioApiError extends Error {
   constructor(public readonly statusCode: number, message: string) {
@@ -62,7 +69,7 @@ async function clioFetch(url: string, init: RequestInit): Promise<Response> {
 }
 
 export async function clioGet(path: string, params?: Record<string, string>): Promise<any> {
-  const token = await getValidAccessToken();
+  const token = await resolveAccessToken();
   const url = new URL(`${getBase()}${path}`);
   if (params) {
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -74,7 +81,7 @@ export async function clioGet(path: string, params?: Record<string, string>): Pr
 }
 
 export async function clioPost(path: string, body: unknown): Promise<any> {
-  const token = await getValidAccessToken();
+  const token = await resolveAccessToken();
   const url = new URL(`${getBase()}${path}`);
   const res = await clioFetch(url.toString(), {
     method: "POST",
@@ -85,7 +92,7 @@ export async function clioPost(path: string, body: unknown): Promise<any> {
 }
 
 export async function clioPatch(path: string, body: unknown): Promise<any> {
-  const token = await getValidAccessToken();
+  const token = await resolveAccessToken();
   const url = new URL(`${getBase()}${path}`);
   const res = await clioFetch(url.toString(), {
     method: "PATCH",
@@ -101,8 +108,10 @@ export function extractNextPageToken(meta: any): string | null {
   if (!nextUrl) return null;
   try { return new URL(nextUrl).searchParams.get("page_token"); }
   catch { return null; }
+}
+
 export async function clioPut(path: string, body: unknown): Promise<any> {
-  const token = await getValidAccessToken();
+  const token = await resolveAccessToken();
   const url = new URL(`${getBase()}${path}`);
   const res = await clioFetch(url.toString(), {
     method: "PUT",

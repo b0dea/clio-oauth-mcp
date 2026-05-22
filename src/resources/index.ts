@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadTokens } from "../auth/tokenStorage.js";
+import { getSessionContext } from "../utils/sessionContext.js";
 
 export function registerResources(server: McpServer): void {
   server.registerResource(
@@ -27,7 +28,8 @@ export function registerResources(server: McpServer): void {
       mimeType: "application/json",
     },
     async (uri) => {
-      const tokens = await loadTokens();
+      const ctx = getSessionContext();
+      const tokens = ctx ? ctx.getTokens() : await loadTokens();
       const payload = tokens
         ? {
           authenticated: true,

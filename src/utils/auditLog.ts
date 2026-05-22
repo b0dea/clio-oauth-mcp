@@ -1,7 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import { randomUUID } from "crypto";
 import { loadTokens } from "../auth/tokenStorage.js";
+import { getSessionContext } from "./sessionContext.js";
+
+const STDIO_SESSION_ID = randomUUID();
 
 const AUDIT_DIR = path.join(os.homedir(), ".clio-mcp");
 const AUDIT_FILE = path.join(AUDIT_DIR, "audit.log");
@@ -12,6 +16,7 @@ const REDACTED_KEYS = new Set([
 
 export interface AuditEntry {
   timestamp: string;
+  session_id: string;
   tool: string;
   args: Record<string, unknown>;
   outcome: "success" | "error" | "not_found";
@@ -36,18 +41,26 @@ function redactArgs(args: Record<string, unknown>): Record<string, unknown> {
 }
 
 export async function appendAuditLog(
-  entry: Omit<AuditEntry, "timestamp" | "clio_user_id"> & { clio_user_id?: string; result_count?: number }
+  entry: Omit<AuditEntry, "timestamp" | "session_id" | "clio_user_id"> & { clio_user_id?: string; result_count?: number }
 ): Promise<void> {
   try {
     await fs.mkdir(AUDIT_DIR, { recursive: true });
 
+    const ctx = getSessionContext();
+    const session_id = ctx?.sessionId ?? STDIO_SESSION_ID;
+
     let clio_user_id = entry.clio_user_id;
     if (!clio_user_id) {
-      try { clio_user_id = (await loadTokens())?.clio_user_id; } catch { /* non-fatal */ }
+      if (ctx) {
+        clio_user_id = ctx.getTokens()?.clio_user_id;
+      } else {
+        try { clio_user_id = (await loadTokens())?.clio_user_id; } catch { /* non-fatal */ }
+      }
     }
 
     const full: AuditEntry = {
       timestamp: new Date().toISOString(),
+      session_id,
       tool: entry.tool,
       args: redactArgs(entry.args),
       outcome: entry.outcome,

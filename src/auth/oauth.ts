@@ -153,6 +153,59 @@ async function exchangeCodeForTokens(
   };
 }
 
+export function buildAuthorizationUrl(sessionId: string): { url: string; nonce: string } {
+  const clientId = (process.env.CLIO_CLIENT_ID ?? "").trim();
+  const baseUrl = (process.env.MCP_BASE_URL ?? "").trim();
+  const redirectUri = `${baseUrl}/oauth/callback`;
+  const nonce = crypto.randomBytes(16).toString("hex");
+  const state = Buffer.from(`${sessionId}:${nonce}`).toString("base64url");
+  const url =
+    `${getAuthUrl()}?` +
+    new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state,
+    });
+  return { url, nonce };
+}
+
+export async function exchangeCodeForTokensPure(
+  code: string,
+  redirectUri: string
+): Promise<ClioTokens> {
+  const clientId = (process.env.CLIO_CLIENT_ID ?? "").trim();
+  const clientSecret = (process.env.CLIO_CLIENT_SECRET ?? "").trim();
+  return exchangeCodeForTokens(code, clientId, clientSecret, redirectUri);
+}
+
+export async function refreshTokensPure(refreshToken: string): Promise<ClioTokens> {
+  const clientId = (process.env.CLIO_CLIENT_ID ?? "").trim();
+  const clientSecret = (process.env.CLIO_CLIENT_SECRET ?? "").trim();
+
+  const res = await fetch(getTokenUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Token refresh failed, please re-authenticate.");
+  }
+
+  const data = await res.json() as any;
+  return {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token || refreshToken,
+    expires_at: Date.now() + data.expires_in * 1000,
+  };
+}
+
 export async function getValidAccessToken(): Promise<string> {
   let tokens = await loadTokens();
 
