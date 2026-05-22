@@ -2,7 +2,7 @@
 
 Open-source Model Context Protocol (MCP) connector that lets Claude read live data from [Clio](https://www.clio.com) — matters, contacts, documents, tasks, calendar, and billing — without copying client information into chat windows. Built for law firms that care about attorney-client privilege, ABA Opinion 512 compliance, and keeping AI workflows inside their existing practice management stack.
 
-> **TL;DR** — 17 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
+> **TL;DR** — 19 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
 
 **Who this is for:** Law firm IT, legal operations teams, tech-forward partners, and engineers at legal tech companies. If you can follow a five-step terminal install, you can use this.
 
@@ -133,6 +133,11 @@ Once connected, you can ask Claude things like:
 **Billing**
 - *"What's the outstanding balance on matter 4821?"*
 - *"When was the last invoice issued for this matter?"*
+
+**Users**
+- *"List all attorneys in the firm"*
+- *"What's the user ID for Jane Smith?"*
+- *"Show me all staff members"*
 
 The connector retrieves live data from Clio on every request. Nothing is cached or stored by the AI.
 
@@ -297,6 +302,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | Tool | Inputs | What it does |
 |---|---|---|
 | `create_note` | `matter_id`, `subject`, `body` | Creates a note on a matter; appears in Clio's matter timeline |
+
+### Users (2 tools)
+
+| Tool | Inputs | What it does |
+|---|---|---|
+| `list_users` | `name`, `subscription_type` (attorney/nonattorney), `enabled`, `limit` | Lists firm users with their IDs |
+| `get_user` | `user_id` | Returns detail for a single user by ID |
 
 ---
 
