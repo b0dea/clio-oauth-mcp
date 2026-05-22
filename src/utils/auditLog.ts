@@ -14,7 +14,7 @@ export interface AuditEntry {
   timestamp: string;
   tool: string;
   args: Record<string, unknown>;
-  outcome: "success" | "error";
+  outcome: "success" | "error" | "not_found";
   error_message?: string;
   clio_user_id?: string;
   matter_id?: number;

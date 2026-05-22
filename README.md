@@ -2,7 +2,7 @@
 
 Open-source Model Context Protocol (MCP) connector that lets Claude read live data from [Clio](https://www.clio.com) — matters, contacts, documents, tasks, calendar, and billing — without copying client information into chat windows. Built for law firms that care about attorney-client privilege, ABA Opinion 512 compliance, and keeping AI workflows inside their existing practice management stack.
 
-> **TL;DR** — 26 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
+> **TL;DR** — 19 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
 
 **Who this is for:** Law firm IT, legal operations teams, tech-forward partners, and engineers at legal tech companies. If you can follow a five-step terminal install, you can use this.
 
@@ -30,7 +30,7 @@ ABA Opinion 512 (2023) requires attorneys using AI tools to understand how those
 
 - **No data retention by the connector.** The connector does not store matter data, client names, or any Clio content. It fetches from the API and passes results to Claude. The only thing persisted locally is your authentication token, and that is encrypted (see below).
 
-- **Scope limited to tasks, notes, and calendar entries.** The connector can create tasks, notes, and calendar entries. It cannot create, edit, or delete matters, contacts, documents, or billing records. Write access is deliberately limited to operations most useful for AI-assisted legal work while minimising liability.
+- **Scope limited to tasks, notes, and document uploads.** The connector can create tasks and notes on matters, and upload documents to matters. It cannot create, edit, or delete matters, contacts, calendar entries, or billing records. This is a deliberate v1 design choice — write access is limited to the operations most useful for AI-assisted legal work while minimising liability.
 
 ### Token security — encryption at rest
 
@@ -103,6 +103,7 @@ Once connected, you can ask Claude things like:
 - *"Show me all open matters for Acme Corp"*
 - *"What's the status of matter 2024-0042?"*
 - *"List my pending matters from the last quarter"*
+- *"Open a new matter for Acme Corp — litigation, responsible attorney John Smith"*
 
 **Contacts**
 - *"Find the contact details for Jane Smith"*
@@ -134,6 +135,11 @@ Once connected, you can ask Claude things like:
 **Billing**
 - *"What's the outstanding balance on matter 4821?"*
 - *"When was the last invoice issued for this matter?"*
+
+**Users**
+- *"List all attorneys in the firm"*
+- *"What's the user ID for Jane Smith?"*
+- *"Show me all staff members"*
 
 The connector retrieves live data from Clio on every request. Nothing is cached or stored by the AI.
 
@@ -246,12 +252,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `auth_status` | Shows whether you are currently authenticated and when your session expires |
 | `logout` | Clears your stored credentials from this machine |
 
-### Matters (2 tools)
+### Matters (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_matters` | `status` (Open/Pending/Closed), `limit` | Lists matters with optional status filter |
+| `list_matters` | `status` (open/pending/closed), `limit` | Lists matters with optional status filter |
 | `get_matter` | `matter_id` | Returns full detail for a specific matter |
+| `create_matter` | `client_id`, `description`, `status`, `open_date`, `practice_area_id`, `billable`, `responsible_attorney_id`, `originating_attorney_id`, `client_reference` | Creates a new matter; status defaults to Open, billable defaults to true |
 
 ### Contacts (2 tools)
 
@@ -260,19 +267,22 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `search_contacts` | `query`, `limit` | Searches contacts by name, email, or company |
 | `get_contact` | `contact_id` | Returns full detail for a specific contact including all emails, phone numbers, and addresses |
 
-### Documents (2 tools)
+### Documents (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
 | `list_documents` | `matter_id` or `parent_id`, `limit` | Lists documents in a matter or folder |
 | `get_document` | `document_id` | Returns document metadata and a direct download URL |
+| `upload_document` | `file_path`, `matter_id`, `name`, `content_type` | Uploads a local file to a matter using Clio's multipart S3 upload flow |
 
-### Tasks (2 tools)
+### Tasks (4 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_tasks` | `matter_id`, `status` (Pending/Complete), `due_date_start`, `due_date_end`, `limit` | Lists tasks with optional filters |
-| `create_task` | `matter_id`, `name`, `priority` (High/Normal/Low), `due_date`, `assignee_id` | Creates a task on a matter; priority defaults to Normal |
+| `list_tasks` | `matter_id`, `status` (Pending/Complete/In Progress/In Review/Draft), `due_date_start`, `due_date_end`, `limit` | Lists tasks with optional filters |
+| `create_task` | `matter_id`, `name`, `description`, `priority` (High/Normal/Low), `due_date`, `assignee_id` | Creates a task on a matter; priority defaults to Normal |
+| `update_task` | `task_id`, `name`, `description`, `priority`, `due_date`, `status`, `assignee_id` | Updates one or more fields on an existing task |
+| `complete_task` | `task_id` | Marks a task as complete |
 
 ### Calendar (3 tools)
 
@@ -282,11 +292,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `list_calendar_entries` | `from`, `to` | Lists calendar entries within a date range (YYYY-MM-DD or YYYY-MM-DDTHH:MM) |
 | `create_calendar_entry` | `summary`, `start_at`, `end_at`, `calendar_owner_id`, `description`, `all_day`, `matter_id`, `location`, `send_email_notification`, `attendee_ids` | Creates a calendar entry (hearing, deadline, meeting); `start_at`/`end_at` accept date or datetime |
 
-### Time entries (1 tool)
+### Time entries (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
 | `list_time_entries` | `matter_id`, `start_date`, `end_date`, `limit` | Lists billable time entries with optional filters |
+| `log_time_entry` | `matter_id`, `date`, `quantity_in_hours`, `note`, `price`, `non_billable`, `no_charge`, `activity_description_id`, `user_id` | Creates a new billable (or non-billable) time entry on a matter |
+| `create_activity` | `type`, `date`, `matter_id`, `note`, `quantity_in_hours`, `price`, `non_billable`, `no_charge`, `activity_description_id`, `user_id`, `reference`, `tax_setting` | Creates any Clio activity type — TimeEntry, ExpenseEntry, HardCostEntry, or SoftCostEntry |
 
 ### Billing (1 tool)
 
@@ -299,6 +311,13 @@ Claude selects and calls these tools automatically based on your questions. You 
 | Tool | Inputs | What it does |
 |---|---|---|
 | `create_note` | `matter_id`, `subject`, `body` | Creates a note on a matter; appears in Clio's matter timeline |
+
+### Users (2 tools)
+
+| Tool | Inputs | What it does |
+|---|---|---|
+| `list_users` | `name`, `subscription_type` (attorney/nonattorney), `enabled`, `limit` | Lists firm users with their IDs |
+| `get_user` | `user_id` | Returns detail for a single user by ID |
 
 ---
 
@@ -397,7 +416,7 @@ Fixed price, four to six weeks, ABA Opinion 512 compliant from day one.
 
 If your firm uses **Filevine** instead of (or alongside) Clio, we ship the same kind of connector for it:
 
-- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 15 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
+- **[Filevine MCP](https://github.com/oktopeak/filevine-mcp)** — open-source MCP connector for Filevine practice management. 17 tools across cases, contacts, notes, documents, tasks, and Collection sections. Same architecture, same audit logging, same encryption at rest. MIT licensed.
 - npm: [`@oktopeak/filevine-mcp`](https://www.npmjs.com/package/@oktopeak/filevine-mcp)
 - MCP Registry: `io.github.oktopeak/filevine-mcp`
 
