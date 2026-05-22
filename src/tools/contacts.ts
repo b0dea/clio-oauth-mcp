@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import z from "zod";
-import { clioGet, ClioApiError } from "../utils/clioClient.js";
+import { clioGet, ClioApiError, extractNextPageToken } from "../utils/clioClient.js";
 import { appendAuditLog } from "../utils/auditLog.js";
 
 const CONTACT_LIST_FIELDS =
@@ -17,35 +17,41 @@ export function registerContactTools(server: McpServer): void {
       inputSchema: {
         query: z.string().min(1).describe("Search string (name, email, or company)"),
         limit: z.number().int().min(1).max(200).default(25).describe("Max results to return (1–200)"),
+        page_token: z.string().optional().describe("Cursor from a previous search_contacts response to fetch the next page"),
       },
     },
-    async ({ query, limit }) => {
+    async ({ query, limit, page_token }) => {
       try {
-        const data = await clioGet("/contacts.json", {
-          query,
-          fields: CONTACT_LIST_FIELDS,
-          limit: String(limit),
-        });
-        const contacts = data.data as any[];
+        const params: Record<string, string> = { query, fields: CONTACT_LIST_FIELDS, limit: String(limit) };
+        if (page_token) params["page_token"] = page_token;
 
-        await appendAuditLog({ tool: "search_contacts", args: { query, limit }, outcome: "success", result_count: contacts?.length ?? 0 });
+        const data = await clioGet("/contacts.json", params);
+        const contacts = data.data as any[];
+        const nextPageToken = contacts.length >= limit ? extractNextPageToken(data.meta) : null;
+
+        await appendAuditLog({ tool: "search_contacts", args: { query, limit, page_token }, outcome: "success", result_count: contacts?.length ?? 0 });
 
         if (!contacts || contacts.length === 0) {
           return { content: [{ type: "text", text: "No contacts found." }] };
         }
 
-        const result = contacts.map((c) => ({
-          id: c.id,
-          name: c.name,
-          email: c.email_addresses?.[0]?.address ?? null,
-          phone: c.phone_numbers?.[0]?.number ?? null,
-          company: c.company?.name ?? null,
-          type: c.type,
-        }));
+        const result = {
+          contacts: contacts.map((c) => ({
+            id: c.id,
+            name: c.name,
+            email: c.email_addresses?.[0]?.address ?? null,
+            phone: c.phone_numbers?.[0]?.number ?? null,
+            company: c.company?.name ?? null,
+            type: c.type,
+          })),
+          total_count: data.meta?.records ?? contacts.length,
+          has_more: nextPageToken !== null,
+          next_page_token: nextPageToken,
+        };
 
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       } catch (err: any) {
-        await appendAuditLog({ tool: "search_contacts", args: { query, limit }, outcome: "error", error_message: err.message });
+        await appendAuditLog({ tool: "search_contacts", args: { query, limit, page_token }, outcome: "error", error_message: err.message });
         return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
       }
     }

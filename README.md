@@ -108,10 +108,12 @@ Once connected, you can ask Claude things like:
 **Contacts**
 - *"Find the contact details for Jane Smith"*
 - *"What's the email address and phone number for client ID 8821?"*
+- *"Show me all contacts matching 'Acme' — fetch the next page if there are more"*
 
 **Documents**
 - *"List all documents on matter 4821"*
 - *"Get the download link for document 9934"*
+- *"Find all documents named 'retainer' across all matters"*
 
 **Tasks**
 - *"What tasks are due this week on matter 4821?"*
@@ -264,14 +266,14 @@ Claude selects and calls these tools automatically based on your questions. You 
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `search_contacts` | `query`, `limit` | Searches contacts by name, email, or company |
+| `search_contacts` | `query`, `limit`, `page_token` | Searches contacts by name, email, or company; returns a paginated envelope with `total_count`, `has_more`, and `next_page_token` — pass the token back to fetch the next page |
 | `get_contact` | `contact_id` | Returns full detail for a specific contact including all emails, phone numbers, and addresses |
 
 ### Documents (3 tools)
 
 | Tool | Inputs | What it does |
 |---|---|---|
-| `list_documents` | `matter_id` or `parent_id`, `limit` | Lists documents in a matter or folder |
+| `list_documents` | `matter_id`, `parent_id`, `query`, `limit`, `page_token` | Lists or full-text searches documents; at least one of `matter_id`, `parent_id`, or `query` is required; returns a paginated envelope with `total_count`, `has_more`, and `next_page_token` |
 | `get_document` | `document_id` | Returns document metadata and a direct download URL |
 | `upload_document` | `file_path`, `matter_id`, `name`, `content_type` | Uploads a local file to a matter using Clio's multipart S3 upload flow |
 

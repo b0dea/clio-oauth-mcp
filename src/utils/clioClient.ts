@@ -84,11 +84,11 @@ export async function clioPost(path: string, body: unknown): Promise<any> {
   return res.json();
 }
 
-export async function clioPut(path: string, body: unknown): Promise<any> {
+export async function clioPatch(path: string, body: unknown): Promise<any> {
   const token = await getValidAccessToken();
   const url = new URL(`${getBase()}${path}`);
   const res = await clioFetch(url.toString(), {
-    method: "PUT",
+    method: "PATCH",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -96,11 +96,16 @@ export async function clioPut(path: string, body: unknown): Promise<any> {
   return text.trim() ? JSON.parse(text) : {};
 }
 
-export async function clioPatch(path: string, body: unknown): Promise<any> {
+export function extractNextPageToken(meta: any): string | null {
+  const nextUrl = meta?.paging?.next;
+  if (!nextUrl) return null;
+  try { return new URL(nextUrl).searchParams.get("page_token"); }
+  catch { return null; }
+export async function clioPut(path: string, body: unknown): Promise<any> {
   const token = await getValidAccessToken();
   const url = new URL(`${getBase()}${path}`);
   const res = await clioFetch(url.toString(), {
-    method: "PATCH",
+    method: "PUT",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
