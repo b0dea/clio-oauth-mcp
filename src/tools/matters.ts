@@ -107,7 +107,7 @@ export function registerMatterTools(server: McpServer): void {
   server.registerTool(
     "create_matter",
     {
-      description: "Create a new matter in the connected Clio account",
+      description: "Create a new matter in the connected Clio account. Requires numeric IDs: look up client_id via search_contacts, attorney IDs via list_users or get_user.",
       inputSchema: {
         client_id: z.number().int().positive().describe("Clio contact ID of the client for this matter"),
         description: z.string().min(1).describe("Matter subject / description"),
@@ -123,12 +123,14 @@ export function registerMatterTools(server: McpServer): void {
     async ({ client_id, description, practice_area_id, status, open_date,
              billable, responsible_attorney_id, originating_attorney_id, client_reference }) => {
       try {
+        const _d = new Date();
+        const todayLocal = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
         const matterData: Record<string, unknown> = {
           client: { id: client_id },
           description,
           status,
           billable,
-          open_date: open_date ?? new Date().toISOString().split("T")[0],
+          open_date: open_date ?? todayLocal,
         };
         if (practice_area_id) matterData["practice_area"] = { id: practice_area_id };
         if (responsible_attorney_id) matterData["responsible_attorney"] = { id: responsible_attorney_id };
