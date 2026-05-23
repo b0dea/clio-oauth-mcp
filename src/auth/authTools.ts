@@ -1,14 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { clearTokens, loadTokens } from "./tokenStorage.js";
-import { getValidAccessToken } from "./oauth.js";
+import { getValidAccessToken, buildAuthorizationUrl } from "./oauth.js";
 import { appendAuditLog } from "../utils/auditLog.js";
+import { getSessionContext } from "../utils/sessionContext.js";
 
 export function registerAuthTools(server: McpServer): void {
   server.registerTool(
     "auth_status",
     { description: "Check whether the connector is authenticated with Clio and when the token expires" },
     async () => {
-      const tokens = await loadTokens();
+      const ctx = getSessionContext();
+      const tokens = ctx ? ctx.getTokens() : await loadTokens();
 
       await appendAuditLog({
         tool: "auth_status",
@@ -47,6 +49,29 @@ export function registerAuthTools(server: McpServer): void {
     "authenticate",
     { description: "Trigger the Clio OAuth login flow" },
     async () => {
+      const ctx = getSessionContext();
+      if (ctx) {
+        // HTTP mode: return a URL for the user to visit in their browser
+        try {
+          const { url, nonce } = buildAuthorizationUrl(ctx.sessionId);
+          ctx.setPendingNonce(nonce);
+          await appendAuditLog({ tool: "authenticate", args: {}, outcome: "success" });
+          return {
+            content: [{
+              type: "text",
+              text: `Please authenticate by visiting this URL:\n\n${url}\n\nAfter completing login in your browser, return here and call any Clio tool.`,
+            }],
+          };
+        } catch (err: any) {
+          await appendAuditLog({ tool: "authenticate", args: {}, outcome: "error", error_message: err.message });
+          return {
+            content: [{ type: "text", text: `❌ Error: ${err.message}` }],
+            isError: true,
+          };
+        }
+      }
+
+      // stdio mode: run browser-based OAuth flow
       try {
         await getValidAccessToken();
         await appendAuditLog({ tool: "authenticate", args: {}, outcome: "success" });
@@ -67,10 +92,16 @@ export function registerAuthTools(server: McpServer): void {
     "logout",
     { description: "Log out of Clio (clears local tokens)" },
     async () => {
+      const ctx = getSessionContext();
       try {
-        const tokens = await loadTokens();
-        const clio_user_id = tokens?.clio_user_id;
-        await clearTokens();
+        const clio_user_id = ctx
+          ? ctx.getTokens()?.clio_user_id
+          : (await loadTokens())?.clio_user_id;
+        if (ctx) {
+          ctx.clearTokens();
+        } else {
+          await clearTokens();
+        }
         await appendAuditLog({ tool: "logout", args: {}, outcome: "success", clio_user_id });
         return {
           content: [{ type: "text", text: "✅ Logged out. Tokens cleared." }],

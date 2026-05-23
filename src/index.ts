@@ -1,44 +1,10 @@
 #!/usr/bin/env node
 import dotenv from 'dotenv';
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerAuthTools } from "./auth/authTools.js";
-import { registerMatterTools } from "./tools/matters.js";
-import { registerContactTools } from "./tools/contacts.js";
-import { registerDocumentTools } from "./tools/documents.js";
-import { registerTaskTools } from "./tools/tasks.js";
-import { registerCalendarTools } from "./tools/calendar.js";
-import { registerActivityTools } from "./tools/activities.js";
-import { registerBillingTools } from "./tools/billing.js";
-import { registerNoteTools } from "./tools/notes.js";
-import { registerResources } from "./resources/index.js";
-import { registerUserTools } from "./tools/users.js";
-import { registerAuditExportTool } from "./tools/auditExport.js";
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 dotenv.config({ path: path.join(__dirname, '../.env') });
-
-const server = new McpServer({
-    name: "clio-mcp",
-    version: "1.0.0",
-});
-
-registerAuthTools(server);
-registerResources(server);
-
-registerMatterTools(server);
-registerContactTools(server);
-registerDocumentTools(server);
-registerTaskTools(server);
-registerCalendarTools(server);
-registerActivityTools(server);
-registerBillingTools(server);
-registerNoteTools(server);
-registerUserTools(server);
-registerAuditExportTool(server);
 
 async function main() {
     const missing = (["CLIO_CLIENT_ID", "CLIO_CLIENT_SECRET"] as const)
@@ -48,9 +14,49 @@ async function main() {
         process.exit(1);
     }
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.error("Clio MCP server running on stdio");
+    const mode = (process.env.TRANSPORT ?? "http").toLowerCase();
+
+    if (mode === "stdio") {
+        const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js");
+        const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+        const { registerAuthTools } = await import("./auth/authTools.js");
+        const { registerResources } = await import("./resources/index.js");
+        const { registerMatterTools } = await import("./tools/matters.js");
+        const { registerContactTools } = await import("./tools/contacts.js");
+        const { registerDocumentTools } = await import("./tools/documents.js");
+        const { registerTaskTools } = await import("./tools/tasks.js");
+        const { registerCalendarTools } = await import("./tools/calendar.js");
+        const { registerActivityTools } = await import("./tools/activities.js");
+        const { registerBillingTools } = await import("./tools/billing.js");
+        const { registerNoteTools } = await import("./tools/notes.js");
+        const { registerUserTools } = await import("./tools/users.js");
+        const { registerAuditExportTool } = await import("./tools/auditExport.js");
+
+        const server = new McpServer({ name: "clio-mcp", version: "1.0.0" });
+        registerAuthTools(server);
+        registerResources(server);
+        registerMatterTools(server);
+        registerContactTools(server);
+        registerDocumentTools(server);
+        registerTaskTools(server);
+        registerCalendarTools(server);
+        registerActivityTools(server);
+        registerBillingTools(server);
+        registerNoteTools(server);
+        registerUserTools(server);
+        registerAuditExportTool(server);
+
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+        console.error("Clio MCP server running on stdio");
+    } else {
+        if (!process.env.MCP_BASE_URL) {
+            console.error("[startup] Fatal: MCP_BASE_URL is required in HTTP mode (e.g. https://mcp.example.com). Set TRANSPORT=stdio for local single-user mode.");
+            process.exit(1);
+        }
+        const { startHttpServer } = await import("./server/http.js");
+        startHttpServer();
+    }
 }
 
 main().catch((error) => {

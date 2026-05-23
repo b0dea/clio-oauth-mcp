@@ -3,6 +3,9 @@ import path from "path";
 import os from "os";
 import { randomUUID } from "crypto";
 import { loadTokens } from "../auth/tokenStorage.js";
+import { getSessionContext } from "./sessionContext.js";
+
+const STDIO_SESSION_ID = randomUUID();
 
 const AUDIT_DIR = path.join(os.homedir(), ".clio-mcp");
 const AUDIT_FILE = path.join(AUDIT_DIR, "audit.log");
@@ -10,8 +13,6 @@ const AUDIT_FILE = path.join(AUDIT_DIR, "audit.log");
 const REDACTED_KEYS = new Set([
   "access_token", "refresh_token", "client_secret", "password", "token", "encryption_key",
 ]);
-
-const SESSION_ID: string = randomUUID();
 
 function detectMachineIp(): string | undefined {
   for (const addrs of Object.values(os.networkInterfaces())) {
@@ -69,14 +70,21 @@ export async function appendAuditLog(
   try {
     await fs.mkdir(AUDIT_DIR, { recursive: true });
 
+    const ctx = getSessionContext();
+    const session_id = ctx?.sessionId ?? STDIO_SESSION_ID;
+
     let clio_user_id = entry.clio_user_id;
     if (!clio_user_id) {
-      try { clio_user_id = (await loadTokens())?.clio_user_id; } catch { /* non-fatal */ }
+      if (ctx) {
+        clio_user_id = ctx.getTokens()?.clio_user_id;
+      } else {
+        try { clio_user_id = (await loadTokens())?.clio_user_id; } catch { /* non-fatal */ }
+      }
     }
 
     const full: AuditEntry = {
       timestamp: new Date().toISOString(),
-      session_id: SESSION_ID,
+      session_id,
       ...(MACHINE_IP !== undefined && { machine_ip: MACHINE_IP }),
       tool: entry.tool,
       args: redactArgs(entry.args),
