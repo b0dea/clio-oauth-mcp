@@ -2,7 +2,7 @@
 
 Open-source Model Context Protocol (MCP) connector that lets Claude read live data from [Clio](https://www.clio.com) — matters, contacts, documents, tasks, calendar, and billing — without copying client information into chat windows. Built for law firms that care about attorney-client privilege, ABA Opinion 512 compliance, and keeping AI workflows inside their existing practice management stack.
 
-> **TL;DR** — 19 Clio tools exposed to Claude. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
+> **TL;DR** — 26 Clio tools exposed to Claude across stdio and HTTP/SSE transports. Audit-logged for ABA Opinion 512. OAuth tokens encrypted at rest with AES-256-GCM. Local-only — no relay server, no cloud middleman. MIT license, free forever.
 
 **Who this is for:** Law firm IT, legal operations teams, tech-forward partners, and engineers at legal tech companies. If you can follow a five-step terminal install, you can use this.
 
@@ -194,10 +194,14 @@ pwd
 
 ### Step 3 — Configure Claude Desktop
 
+As of v2.0.0 the connector supports two transports: **stdio** (the connector runs as a child process of Claude Desktop, single-user) and **HTTP/SSE** (the connector runs as a standalone server, supports multiple sessions and remote access). Pick one.
+
 Open your Claude Desktop configuration file:
 
 - **Mac:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+#### Option A — stdio (simplest, single-user)
 
 Add the following block inside the `"mcpServers"` section, replacing the placeholder values with your own:
 
@@ -206,13 +210,45 @@ Add the following block inside the `"mcpServers"` section, replacing the placeho
   "mcpServers": {
     "clio": {
       "command": "node",
-      "args": ["/FULL/PATH/TO/clio-mcp/build/index.js"]
+      "args": ["/FULL/PATH/TO/clio-mcp/build/index.js"],
+      "env": {
+        "TRANSPORT": "stdio",
+        "CLIO_CLIENT_ID": "your_client_id",
+        "CLIO_CLIENT_SECRET": "your_client_secret"
+      }
     }
   }
 }
 ```
 
-Replace `/FULL/PATH/TO/clio-mcp` with the path you noted in Step 1 (e.g., `/Users/yourname/clio-mcp`).
+Replace `/FULL/PATH/TO/clio-mcp` with the path you noted in Step 1 (e.g., `/Users/yourname/clio-mcp`). `TRANSPORT=stdio` is required because the connector defaults to HTTP mode at v2.0.0.
+
+#### Option B — HTTP/SSE (standalone server, multi-session)
+
+Start the connector as a long-running server. In a terminal, from the `clio-mcp` directory:
+
+```bash
+TRANSPORT=http MCP_BASE_URL=http://127.0.0.1:3000 \
+CLIO_CLIENT_ID=your_client_id CLIO_CLIENT_SECRET=your_client_secret \
+node build/index.js
+```
+
+Then point Claude Desktop at it via the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge:
+
+```json
+{
+  "mcpServers": {
+    "clio": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:3000/mcp"]
+    }
+  }
+}
+```
+
+If you set `MCP_API_KEY` on the server, pass it as a header from `mcp-remote` (`--header "Authorization: Bearer <key>"`).
+
+---
 
 If the file already has other MCP servers configured, add a comma after the last entry and then add the `"clio"` block.
 
@@ -321,6 +357,12 @@ Claude selects and calls these tools automatically based on your questions. You 
 | `list_users` | `name`, `subscription_type` (attorney/nonattorney), `enabled`, `limit` | Lists firm users with their IDs |
 | `get_user` | `user_id` | Returns detail for a single user by ID |
 
+### Audit log (1 tool)
+
+| Tool | Inputs | What it does |
+|---|---|---|
+| `export_audit_log` | `date_from`, `date_to`, `matter_id`, `limit`, `offset` | Exports audit-log entries for bar review and ABA Opinion 512 compliance. Filterable by date range and matter, paginated (default 500 per page, max 1000) |
+
 ---
 
 ## Resources
@@ -336,14 +378,19 @@ The connector also exposes two MCP resources — read-only content that compatib
 
 ## Configuration reference
 
-All settings are passed as environment variables in your Claude Desktop config (see Step 3). Only the first two are required; `ENCRYPTION_KEY` is auto-managed via the OS keychain.
+All settings are passed as environment variables (in your Claude Desktop config for stdio mode, or in the server's environment for HTTP mode). Only `CLIO_CLIENT_ID` and `CLIO_CLIENT_SECRET` are required in all modes; `MCP_BASE_URL` is additionally required in HTTP mode.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `CLIO_CLIENT_ID` | Yes | — | Client ID from your Clio developer application |
 | `CLIO_CLIENT_SECRET` | Yes | — | Client Secret from your Clio developer application |
+| `TRANSPORT` | No | `http` | `stdio` or `http`. Defaults to `http` at v2.0.0; set to `stdio` for the pre-v2 behavior |
+| `MCP_BASE_URL` | HTTP mode | — | Public base URL of this server (e.g. `http://127.0.0.1:3000`). Used for the OAuth redirect |
+| `PORT` | No | `3000` | HTTP listen port (HTTP mode only) |
+| `MCP_API_KEY` | No | — | If set, the HTTP server requires this bearer token in the `Authorization` header. Recommended for any non-localhost deployment |
 | `ENCRYPTION_KEY` | No | auto-generated | Overrides OS keychain. Required only for CI/headless installs where no keychain is available. Must be a 64-character hex string. |
-| `CLIO_REDIRECT_PORT` | No | `5678` | Local port for the OAuth callback. Change if 5678 is in use on your machine |
+| `CLIO_REDIRECT_PORT` | No | `5678` | Local port for the OAuth callback (stdio mode). Change if 5678 is in use on your machine |
+| `CLIO_REGION` | No | `us` | `us` or `eu`. Controls the default Clio API and auth base URLs |
 | `CLIO_API_BASE` | No | `https://app.clio.com/api/v4` | Override for Clio EU, Canada, or Australia (e.g., `https://eu.app.clio.com/api/v4`) |
 | `CLIO_AUTH_URL` | No | `https://app.clio.com/oauth/authorize` | OAuth authorization endpoint |
 | `CLIO_TOKEN_URL` | No | `https://app.clio.com/oauth/token` | OAuth token endpoint |
@@ -355,7 +402,7 @@ All settings are passed as environment variables in your Claude Desktop config (
 Every tool call is recorded at `~/.clio-mcp/audit.log` in [JSONL](https://jsonlines.org) format (one JSON object per line). Example entry:
 
 ```json
-{"timestamp":"2026-04-23T14:05:00.123Z","tool":"get_matter","args":{"matter_id":4821},"outcome":"success","clio_user_id":"10023","matter_id":4821}
+{"timestamp":"2026-04-23T14:05:00.123Z","session_id":"3f2e9b1c-...","machine_ip":"192.168.1.42","tool":"get_matter","args":{"matter_id":4821},"outcome":"success","clio_user_id":"10023","matter_id":4821}
 ```
 
 Each entry contains:
@@ -363,13 +410,15 @@ Each entry contains:
 | Field | Description |
 |---|---|
 | `timestamp` | ISO 8601 date and time of the call |
+| `session_id` | Per-session UUID (stable for the life of a stdio process; one per HTTP session) |
+| `machine_ip` | LAN IPv4 address of the host that logged the call, when detectable |
 | `tool` | Which tool Claude invoked |
 | `args` | Arguments passed to the tool (secrets are automatically redacted) |
-| `outcome` | `success` or `error` |
+| `outcome` | `success`, `error`, or `not_found` |
 | `error_message` | Present only when `outcome` is `error` |
 | `clio_user_id` | The Clio user whose credentials were active |
 | `matter_id` | Present for matter-specific queries |
-| `result_count` | Present for list tools — number of records returned |
+| `result_count` | Present for list / export tools — number of records returned |
 
 The log file is append-only and never rotated or truncated by this software. To archive old entries, use your operating system's log rotation tools (`logrotate` on Linux/Mac).
 
