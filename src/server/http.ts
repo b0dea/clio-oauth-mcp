@@ -14,6 +14,7 @@ import { registerActivityTools } from "../tools/activities.js";
 import { registerBillingTools } from "../tools/billing.js";
 import { registerNoteTools } from "../tools/notes.js";
 import { registerUserTools } from "../tools/users.js";
+import { registerAuditExportTool } from "../tools/auditExport.js";
 import { buildAuthorizationUrl, exchangeCodeForTokensPure, refreshTokensPure } from "../auth/oauth.js";
 import type { ClioTokens } from "../auth/oauth.js";
 import { sessionStorage, SessionContext } from "../utils/sessionContext.js";
@@ -42,6 +43,7 @@ function createMcpServer(): McpServer {
   registerBillingTools(server);
   registerNoteTools(server);
   registerUserTools(server);
+  registerAuditExportTool(server);
   return server;
 }
 

@@ -14,9 +14,19 @@ const REDACTED_KEYS = new Set([
   "access_token", "refresh_token", "client_secret", "password", "token", "encryption_key",
 ]);
 
+function detectMachineIp(): string | undefined {
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (addr.family === "IPv4" && !addr.internal) return addr.address;
+    }
+  }
+}
+const MACHINE_IP: string | undefined = detectMachineIp();
+
 export interface AuditEntry {
   timestamp: string;
   session_id: string;
+  machine_ip?: string;
   tool: string;
   args: Record<string, unknown>;
   outcome: "success" | "error" | "not_found";
@@ -24,6 +34,20 @@ export interface AuditEntry {
   clio_user_id?: string;
   matter_id?: number;
   result_count?: number;
+}
+
+export interface AuditLogFilter {
+  date_from?: string;
+  date_to?: string;
+  matter_id?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ReadAuditLogResult {
+  entries: AuditEntry[];
+  total_matched: number;
+  truncated: boolean;
 }
 
 function redactArgs(args: Record<string, unknown>): Record<string, unknown> {
@@ -41,7 +65,7 @@ function redactArgs(args: Record<string, unknown>): Record<string, unknown> {
 }
 
 export async function appendAuditLog(
-  entry: Omit<AuditEntry, "timestamp" | "session_id" | "clio_user_id"> & { clio_user_id?: string; result_count?: number }
+  entry: Omit<AuditEntry, "timestamp" | "session_id" | "machine_ip" | "clio_user_id"> & { clio_user_id?: string; result_count?: number }
 ): Promise<void> {
   try {
     await fs.mkdir(AUDIT_DIR, { recursive: true });
@@ -61,6 +85,7 @@ export async function appendAuditLog(
     const full: AuditEntry = {
       timestamp: new Date().toISOString(),
       session_id,
+      ...(MACHINE_IP !== undefined && { machine_ip: MACHINE_IP }),
       tool: entry.tool,
       args: redactArgs(entry.args),
       outcome: entry.outcome,
@@ -74,4 +99,36 @@ export async function appendAuditLog(
   } catch (err: any) {
     console.error(`[audit] WARNING: Failed to write audit log: ${err.message}`);
   }
+}
+
+export async function readAuditLog(filter: AuditLogFilter = {}): Promise<ReadAuditLogResult> {
+  const limit = Math.min(filter.limit ?? 500, 1000);
+  const offset = filter.offset ?? 0;
+
+  let raw: string;
+  try {
+    raw = await fs.readFile(AUDIT_FILE, "utf8");
+  } catch (err: any) {
+    if (err.code === "ENOENT") return { entries: [], total_matched: 0, truncated: false };
+    throw err;
+  }
+
+  const matched: AuditEntry[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line) continue;
+    let entry: Partial<AuditEntry>;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (filter.date_from && (!entry.timestamp || entry.timestamp.slice(0, 10) < filter.date_from)) continue;
+    if (filter.date_to && (!entry.timestamp || entry.timestamp.slice(0, 10) > filter.date_to)) continue;
+    if (filter.matter_id !== undefined && entry.matter_id !== filter.matter_id) continue;
+    matched.push(entry as AuditEntry);
+  }
+
+  const total_matched = matched.length;
+  const page = matched.slice(offset, offset + limit);
+  return { entries: page, total_matched, truncated: offset + page.length < total_matched };
 }
