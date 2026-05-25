@@ -18,6 +18,12 @@ Watch Claude pull live data from Clio in under a minute — matters, contacts, t
 
 ---
 
+**Setup tips + ABA Opinion 512 compliance updates for firms building with Claude + Clio.**
+
+→ [Subscribe to Oktopeak Builder Notes](https://tally.so/r/q4kzk9?source=clio-readme) — short emails, easy unsubscribe.
+
+---
+
 ## Compliance & Security
 
 This section exists because law firms evaluating AI tools have asked the right questions. Here are direct answers.
