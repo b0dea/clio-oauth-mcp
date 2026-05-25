@@ -1,6 +1,9 @@
 import express from "express";
+import { readFileSync } from "fs";
 import { randomUUID } from "crypto";
 import { timingSafeEqual } from "crypto";
+
+const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerAuthTools } from "../auth/authTools.js";
@@ -31,7 +34,7 @@ interface SessionRecord {
 const sessions = new Map<string, SessionRecord>();
 
 function createMcpServer(): McpServer {
-  const server = new McpServer({ name: "clio-mcp", version: "1.0.0" });
+  const server = new McpServer({ name: "clio-mcp", version: pkg.version });
   registerAuthTools(server);
   registerResources(server);
   registerMatterTools(server);
