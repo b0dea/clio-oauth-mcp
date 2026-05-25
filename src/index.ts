@@ -1,10 +1,12 @@
 #!/usr/bin/env node
+import { readFileSync } from 'fs';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../.env') });
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 async function main() {
     const missing = (["CLIO_CLIENT_ID", "CLIO_CLIENT_SECRET"] as const)
@@ -32,7 +34,7 @@ async function main() {
         const { registerUserTools } = await import("./tools/users.js");
         const { registerAuditExportTool } = await import("./tools/auditExport.js");
 
-        const server = new McpServer({ name: "clio-mcp", version: "1.0.0" });
+        const server = new McpServer({ name: "clio-mcp", version: pkg.version });
         registerAuthTools(server);
         registerResources(server);
         registerMatterTools(server);
