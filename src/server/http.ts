@@ -1,9 +1,6 @@
 import express from "express";
 import { readFileSync } from "fs";
-import { randomUUID } from "crypto";
-import { timingSafeEqual } from "crypto";
-
-const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+import { randomUUID, timingSafeEqual } from "crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerAuthTools } from "../auth/authTools.js";
@@ -22,6 +19,8 @@ import { buildAuthorizationUrl, exchangeCodeForTokensPure, refreshTokensPure } f
 import type { ClioTokens } from "../auth/oauth.js";
 import { sessionStorage, SessionContext } from "../utils/sessionContext.js";
 import { appendAuditLog } from "../utils/auditLog.js";
+
+const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
 
 interface SessionRecord {
   transport: StreamableHTTPServerTransport;
