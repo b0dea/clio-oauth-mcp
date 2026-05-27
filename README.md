@@ -14,7 +14,13 @@ Open-source Model Context Protocol (MCP) connector that lets Claude read live da
 
 Watch Claude pull live data from Clio in under a minute — matters, contacts, tasks — without copying client information into chat.
 
-[![Clio MCP — live demo on YouTube](docs/demo-thumbnail.png)](https://youtu.be/RmB0iGyJ9cs)
+<p align="center">
+  <a href="https://youtu.be/RmB0iGyJ9cs">
+    <img src="docs/demo-thumbnail.png" alt="Clio MCP — Claude pulls live data" width="640">
+  </a>
+  <br><br>
+  <a href="https://youtu.be/RmB0iGyJ9cs"><b>▶&nbsp;&nbsp;Watch the 60-second demo on YouTube</b></a>
+</p>
 
 ---
 
