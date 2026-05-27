@@ -6,7 +6,14 @@ Open-source Model Context Protocol (MCP) connector that lets Claude read live da
 
 **Who this is for:** Law firm IT, legal operations teams, tech-forward partners, and engineers at legal tech companies. If you can follow a five-step terminal install, you can use this.
 
-**Who this is NOT for (yet):** Attorneys who've never opened a terminal. A simpler one-command installer is planned for v0.2. In the meantime, ask your IT person to run the setup below — or [book a 30-min call](https://calendly.com/office-oktopeak/30min) and we'll deploy it for you.
+> [!TIP]
+> **Not a developer? You don't need to be.**
+>
+> The README below assumes someone comfortable editing a JSON config file. If that's not you or your team, we deploy this for law firms — scoped credentials, audit log wired in, one custom workflow, training. A simpler one-command installer is also planned for v0.2.
+>
+> → **[See Guided MCP Setup](https://oktopeak.com/services/mcp-guided-setup/)** — or [book a 30-min call](https://calendly.com/office-oktopeak/30min)
+
+**Jump to:** [Demo](#demo) · [Setup](#setup) · [Available tools](#available-tools) · [Security & compliance](#compliance--security) · [Need it deployed for you?](#need-more-than-the-connector)
 
 ---
 
@@ -171,7 +178,7 @@ Before you begin, make sure you have:
 
 ## Setup
 
-Setup is a one-time configuration. You will register a Clio Developer App and add a JSON block to your Claude Desktop config. The encryption key is generated automatically on first run and stored in your OS keychain — no manual key generation required. Plan 10-15 minutes the first time. Subsequent reinstalls take a few minutes.
+**5 steps. 10-15 minutes the first time.** You'll register a Clio Developer App, add one JSON block to your Claude Desktop config, and run an OAuth login. The encryption key is generated automatically — no manual key handling.
 
 Before you run any of this in production, read the [Compliance & Security](#compliance--security) and [Trust Model](#trust-model) sections above. If you are deploying for a firm, pair the connector with Claude Enterprise or the Claude API with ZDR — see "Which Claude tier should we use?" above.
 
