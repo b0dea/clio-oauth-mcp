@@ -284,6 +284,15 @@ You should see your Clio user ID and token expiry time.
 
 ---
 
+> [!TIP]
+> **Not the person who edits config files?**
+>
+> If the five steps above look like too much, we can deploy it in your firm for you — scoped OAuth credentials, audit log wired into your stack, one custom workflow designed with your team, and training. Most law firms find this is the faster path.
+>
+> → **[See Guided MCP Setup](https://oktopeak.com/services/mcp-guided-setup/)** — or [book a 30-min scoping call](https://calendly.com/office-oktopeak/30min)
+
+---
+
 ## Available tools
 
 Claude selects and calls these tools automatically based on your questions. You do not need to invoke them by name.
