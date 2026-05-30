@@ -277,6 +277,11 @@ If the file already has other MCP servers configured, add a comma after the last
 
 Quit Claude Desktop completely and reopen it.
 
+> [!TIP]
+> **On Windows?** The same Windows-specific gotchas that hit our MyCase MCP install also hit Clio MCP: `Could not attach to MCP server` (direct npx invocation), `UNABLE_TO_VERIFY_LEAF_SIGNATURE` (corporate antivirus SSL inspection), and OAuth redirect port mismatches. The fixes (`cmd /c npx` wrapper, `NODE_OPTIONS=--use-system-ca`, port matching) are documented in our companion install guide.
+>
+> → **[MyCase MCP on Windows: The Install Guide We Wish Existed](https://oktopeak.com/blog/mycase-mcp-windows-install-guide/?utm_source=github&utm_medium=readme&utm_campaign=clio-mcp&utm_content=windows-install-guide)** — written for MyCase MCP but the Windows fixes apply identically to Clio MCP.
+
 ### Step 5 — Authenticate with Clio
 
 In a new Claude conversation, type:
