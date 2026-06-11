@@ -7,7 +7,7 @@ verified APIs, versions, and the upstream port map.
 
 ## Start here
 
-Both OAuth legs are live, the Clio tools are ported multi-tenant, and the connector is hardened — **M6 done**.
+Both OAuth legs are live, the Clio tools are ported multi-tenant, and the connector is hardened — **all milestones (M0–M7) done**.
 Leg 1 (Claude ⇄ us) is `new OAuthProvider({...})` (DCR, PKCE-S256, `/authorize`, `/token`, `/.well-known/*`);
 Leg 2 (us ⇄ Clio) is the Clio broker (`auth/clio-handler.ts`): `/authorize` → Clio, `/clio/callback` exchanges
 the code, reads `who_am_i`, encrypts the per-user tokens into D1 (`storage/`), and mints the Leg-1 token bound
@@ -30,7 +30,11 @@ The sink (`storage/auditStore.ts` + the `upstream-shims/auditLog.ts` forwarder) 
 table is **not deployed** (migrations `0002`/`0003` exist but aren't applied; `wrangler deploy` doesn't apply
 migrations), and `observability:false` means no Workers request logs are stored either (`wrangler tail` still
 works). The D1 holds only the per-user OAuth token store. To enable audit: apply the migrations + set the var
-— see `docs/operations.md`. Next task is **M7**: evals + docs + upstream-sync runbook.
+— see `docs/operations.md`.
+
+**M7 done:** 10 read-only eval questions in `evals/clio-evals.xml` (PRD §9), `docs/operations.md` completed
+(connector add/remove section added), and the upstream-sync dry run was a clean no-op (upstream unchanged
+since the fork — HEAD `d85f3be`). The build is complete; live two-user acceptance remains gated on a real Clio app.
 
 ```bash
 npm install

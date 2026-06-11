@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Clio Remote MCP Connector — read-only evaluation set (PRD §9 / §M7).
+
+  10 question/answer pairs for validating the connector against a firm's live Clio. Every question is
+  READ-ONLY (no write tool ever appears in an answer path), INDEPENDENT (no shared state; runs in any
+  order), requires MULTIPLE clio_ tool calls, is realistic for a law firm, and resolves to a SINGLE
+  string-verifiable answer (a count, a sum, a name, or a phone number).
+
+  This is a TEMPLATE — answers depend on the firm's own Clio data, which isn't reachable from here.
+  To use it:
+    1. Replace every &lt;placeholder&gt; (e.g. &lt;display_number&gt;, &lt;date&gt;) with a real value from a
+       known, stable test record. Prefer frozen reference data — pin explicit dates and point at quiet
+       or closed matters — so a verified answer doesn't drift between runs.
+    2. Run the question through the connector and record the verified result in &lt;answer&gt;.
+    3. Re-run later to confirm the connector still returns that answer.
+
+  Schema: PRD §9's <evaluation>/<qa_pair>/<question>/<answer>, extended with two non-normative children:
+    <tools>  — the exact clio_ tools the answer path uses (verified against
+               src/remote/adapter/clioTools.ts; only read tools, all clio_-prefixed).
+    <method> — the call sequence, so the operator can reproduce and verify.
+  Note: upload_document is NOT ported (stdio-only), and no write tool
+  (clio_create_*/clio_update_task/clio_complete_task/clio_log_time_entry) is used anywhere below.
+-->
+<evaluation>
+
+  <qa_pair>
+    <question>For matter &lt;display_number&gt;, how many tasks with status "Pending" are due on or before &lt;date&gt;?</question>
+    <tools>clio_list_matters, clio_list_tasks</tools>
+    <method>clio_list_matters (read its display_number to resolve the numeric matter id) → clio_list_tasks(matter_id=&lt;id&gt;, status="Pending", due_date_end=&lt;date&gt;, limit=200) → count the returned tasks.</method>
+    <answer>FIRM-SPECIFIC — operator fills after pointing at a known matter and date.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>For matter &lt;display_number&gt;, what is the total outstanding balance across its issued bills (in the firm's currency)?</question>
+    <tools>clio_list_matters, clio_get_billing_summary</tools>
+    <method>clio_list_matters → resolve &lt;display_number&gt; to the matter id → clio_get_billing_summary(matter_id=&lt;id&gt;) → read total_outstanding (draft/void bills are already excluded by the tool).</method>
+    <answer>FIRM-SPECIFIC — operator fills after pointing at a known matter with bills.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>For matter &lt;display_number&gt;, what is the total number of hours logged as time entries dated between &lt;start_date&gt; and &lt;end_date&gt; inclusive?</question>
+    <tools>clio_list_matters, clio_list_time_entries</tools>
+    <method>clio_list_matters → resolve &lt;display_number&gt; to the matter id → clio_list_time_entries(matter_id=&lt;id&gt;, start_date=&lt;start_date&gt;, end_date=&lt;end_date&gt;, limit=200) → sum quantity_in_hours across the returned entries.</method>
+    <answer>FIRM-SPECIFIC — operator fills (pick a window with ≤200 entries so the single page is complete).</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>On matter &lt;display_number&gt;, how many Pending tasks are assigned to the attorney named "&lt;full_name&gt;"?</question>
+    <tools>clio_list_matters, clio_list_users, clio_list_tasks</tools>
+    <method>clio_list_matters → resolve &lt;display_number&gt; to the matter id; clio_list_users(name="&lt;full_name&gt;") → resolve the attorney's user id; clio_list_tasks(matter_id=&lt;id&gt;, status="Pending", limit=200) → count tasks whose assignee.id equals that user id.</method>
+    <answer>FIRM-SPECIFIC — operator fills after choosing a matter and an attorney on it.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>For the client whose contact record lists the email &lt;email&gt;, how many of the firm's currently open matters belong to that client?</question>
+    <tools>clio_search_contacts, clio_list_matters</tools>
+    <method>clio_search_contacts(query="&lt;email&gt;") → read the matching contact's canonical name; clio_list_matters(status="open", limit=200) → count matters whose client equals that name. (list_matters has no page cursor — verify the firm has ≤200 open matters so the single page is complete.)</method>
+    <answer>FIRM-SPECIFIC — operator fills after choosing a client with at least one open matter.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>What is the name of the most recently created document on matter &lt;display_number&gt;?</question>
+    <tools>clio_list_matters, clio_list_documents</tools>
+    <method>clio_list_matters → resolve &lt;display_number&gt; to the matter id → clio_list_documents(matter_id=&lt;id&gt;, limit=200) → pick the document with the latest created_at → return its name.</method>
+    <answer>FIRM-SPECIFIC — operator fills after pointing at a matter that has documents.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>How many calendar entries associated with matter &lt;display_number&gt; fall between &lt;from&gt; and &lt;to&gt; inclusive?</question>
+    <tools>clio_list_matters, clio_list_calendar_entries</tools>
+    <method>clio_list_matters → resolve &lt;display_number&gt; to the matter id; clio_list_calendar_entries(from=&lt;from&gt;, to=&lt;to&gt;) → count entries whose matter.display_number equals &lt;display_number&gt;.</method>
+    <answer>FIRM-SPECIFIC — operator fills after choosing a matter and a date range with hearings/deadlines.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>On matter &lt;display_number&gt;, how many distinct firm users logged time entries between &lt;start_date&gt; and &lt;end_date&gt; inclusive?</question>
+    <tools>clio_list_matters, clio_list_time_entries</tools>
+    <method>clio_list_matters → resolve &lt;display_number&gt; to the matter id → clio_list_time_entries(matter_id=&lt;id&gt;, start_date=&lt;start_date&gt;, end_date=&lt;end_date&gt;, limit=200) → count distinct user.id across the returned entries.</method>
+    <answer>FIRM-SPECIFIC — operator fills (pick a window with ≤200 entries so the single page is complete).</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>What is the primary phone number on file for the contact named "&lt;contact_name&gt;"?</question>
+    <tools>clio_search_contacts, clio_get_contact</tools>
+    <method>clio_search_contacts(query="&lt;contact_name&gt;") → resolve the contact id → clio_get_contact(contact_id=&lt;id&gt;) → return the first phone_numbers entry's number.</method>
+    <answer>FIRM-SPECIFIC — operator fills after choosing a contact with a phone number on file.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>How many total hours did the user named "&lt;full_name&gt;" log across all matters between &lt;start_date&gt; and &lt;end_date&gt; inclusive?</question>
+    <tools>clio_list_users, clio_list_time_entries</tools>
+    <method>clio_list_users(name="&lt;full_name&gt;") → resolve the user id; clio_list_time_entries(start_date=&lt;start_date&gt;, end_date=&lt;end_date&gt;, limit=200) → sum quantity_in_hours over entries whose user.id equals that user id. (list_time_entries has no page cursor — pick a window with ≤200 firm-wide entries so the page is complete.)</method>
+    <answer>FIRM-SPECIFIC — operator fills after choosing a timekeeper and a bounded window.</answer>
+  </qa_pair>
+
+</evaluation>

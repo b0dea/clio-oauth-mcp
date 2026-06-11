@@ -78,6 +78,6 @@ api.all("/mcp", async (c) => {
 });
 
 api.onError((err, c) => {
-  console.error("api handler error:", err);
+  console.error("api handler error:", err instanceof Error ? err.message : String(err));
   return c.json({ error: "server_error" }, 500);
 });

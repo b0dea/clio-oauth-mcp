@@ -8,6 +8,53 @@ or adds a new module (merge-safe).
 
 ---
 
+## 2026-06-11 — M7: evals + docs completeness + upstream-sync dry run (clean no-op)
+
+Final milestone (PRD §M7 / §9 / §8). All changes are **merge-safe** — a new `evals/` file, `docs/`
+additions, and a one-line log-format fix in our own `src/remote/mcp/api.ts`. **No upstream tool files
+edited.**
+
+- **10 read-only eval questions** — new `evals/clio-evals.xml` (PRD §9 XML format). Each is read-only,
+  independent (runs in any order, no shared state), requires multiple `clio_` tool calls, is realistic
+  for a firm, and resolves to one string-verifiable answer (a count, sum, name, or phone number).
+  Delivered as a **template**: answers are firm-specific, so each carries `FIRM-SPECIFIC — operator
+  fills …` and every `&lt;placeholder&gt;` is filled against a known record. Tool names verified against
+  `adapter/clioTools.ts` — only read tools appear, all `clio_`-prefixed; no write tool and not
+  `upload_document` (not ported). Schema extends §9 with two non-normative children, `<tools>` (the
+  exact tools each answer uses) and `<method>` (the call sequence), so the operator can reproduce.
+- **Docs completeness** (`docs/operations.md`) — added the one genuine gap, **Add / remove the
+  connector (Claude org)**: the org Owner adds the `/mcp` URL once (Organization settings → Connectors),
+  each user Connects their own Clio, opt-out per-tool toggles are called out, and full off-boarding
+  (remove connector → purge the user's `clio_tokens`/`users` rows + the `clio-token:` KV cache → revoke
+  the app in Clio). Confirmed the rest was already covered: deploy, secrets/key-rotation, Clio-app
+  registration, rate limiting, audit (off by default, with the read-only D1 export query), the
+  upstream-sync runbook, and the PRD §7 data-flow note. Status banner bumped M6 → M7.
+- **Upstream-sync dry run (PRD §8) — clean no-op.** `git fetch upstream`; `git log main..upstream/main`
+  is **empty** — `oktopeak/clio-mcp` has shipped nothing since the fork (upstream HEAD is still
+  `d85f3be`, identical to our merge-base; last release v2.0.0). No merge performed, no conflicts to
+  resolve. Tagged `upstream-sync/2026-06-11`. The three rewritten files
+  (`tokenStorage.ts`/`auditLog.ts`/`oauth.ts`, build-notes §7) stay the conflict-risk set for whenever
+  upstream next moves; the runbook in `docs/operations.md` covers that path.
+- **`mcp/api.ts` catch-all consistency (operator-approved).** The pre-existing `onError` handler now
+  logs `err instanceof Error ? err.message : String(err)`, matching every other `console.error` site in
+  `src/remote/` (was the raw `err` object — flagged in the M6 review). Nil security delta; removes the
+  one outlier. Not an upstream file.
+
+**Quality gates:** `/simplify` (no-op — the M7 change set is docs/XML + one log line, nothing to
+simplify) + a security-weighted feature-dev review (focus: evals truly read-only/independent/verifiable,
+docs accuracy, and that the no-op sync weakened no M6 invariant — it touched no auth/token code). All
+clear; no findings requiring code changes.
+
+**Verified:** `npm run build` (stdio green) · `npm run typecheck:worker` green · `npx vitest run`
+**168 green** (no test changes — M7 is docs/evals + a log-format line, no behavior change). No deploy
+needed. Remote D1 still has **only** `users`/`clio_tokens`/`pending_auth` (migrations `0002`/`0003`
+unapplied); `observability:false`.
+
+**Pilot complete — remaining steps are operator-gated:** register the real Clio private app → confirm
+`CLIO_CLIENT_ID`/`SECRET` are real → add the connector to the Claude org → run the live two-user
+acceptance. The build, hardening, and isolation proof are done and green; only the live run waits on a
+real Clio app. See `README.local.md`.
+
 ## 2026-06-11 — M6: hardening (redirect-URI pin + rate limiting) + automated cross-user isolation test
 
 Hardening pass + the must-pass cross-user isolation proof (PRD §M6/§7). All changes are **merge-safe**

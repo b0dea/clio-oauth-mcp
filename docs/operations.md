@@ -3,8 +3,8 @@
 Operator runbook. Pilot is deployed at `https://clio-oauth-mcp.beatech.workers.dev`
 (CF account `Alex@beatech.dev`). To move it elsewhere, see `docs/migration.md`.
 
-> Status: full two-leg OAuth + 21 multi-tenant Clio tools are live (M0–M6). Each user connects
-> their own Clio account; per-user tokens are AES-256-GCM ciphertext at rest. Audit logging is
+> Status: full two-leg OAuth + 21 multi-tenant Clio tools are live (M0–M7 — build complete). Each user
+> connects their own Clio account; per-user tokens are AES-256-GCM ciphertext at rest. Audit logging is
 > present but **OFF by default** (see below). Live two-user acceptance is gated on a real Clio app
 > (see "Register the Clio app").
 
@@ -66,6 +66,42 @@ One **private** app in the Clio Developer Portal (EU region) against the firm's 
 - Access permissions: read/write per `V1_WRITE_SCOPE=all`.
 - Copy `client_id`/`client_secret` into the secrets above.
 - Private app = single firm, no Clio review needed. (See `docs/build-notes.md` §0/§6.)
+
+## Add / remove the connector (Claude org)
+
+Done once by the org Owner, after the Worker is deployed and the Clio app is registered.
+
+**Add (once for the whole firm):** Claude **Organization settings → Connectors → Add custom
+connector** → URL `https://clio-oauth-mcp.beatech.workers.dev/mcp` (the `/mcp` path, not the root).
+Save. The connector is then available to every member — no one else has to add it.
+
+**Each user connects their own Clio (once):**
+1. Open the connector in Claude and click **Connect**.
+2. Claude runs the OAuth dance and redirects to Clio; the user logs in with their **own** Clio
+   credentials and approves.
+3. Done — Claude now acts on that user's own Clio data, isolated from everyone else's.
+
+Per-tool toggles are **opt-out**: with `V1_WRITE_SCOPE=all` the write tools (create/update/complete)
+are registered and on by default. At rollout, tell users they can disable individual tools in the
+connector's tool list, and that Clio's own per-user permissions are the backstop (PRD §7). To ship a
+read-only connector instead, register a read-only Clio app and set `V1_WRITE_SCOPE=read-only`.
+
+**Remove:**
+- *Whole firm* — Organization settings → Connectors → the connector → **Remove**. Every user loses it.
+- *One user* — the user clicks **Disconnect** on the connector, or revokes the app under their Clio
+  account's authorized applications.
+
+Removing the connector in Claude stops new calls but does **not** delete the user's encrypted Clio
+tokens from D1 — they remain as ciphertext until overwritten on the next Connect. To fully off-board a
+user (e.g. they leave the firm), purge their stored connection and have them revoke the app in Clio
+(`user_id` is `clio-<clioUserId>`):
+
+```bash
+wrangler d1 execute clio-oauth-mcp --remote --command \
+  "DELETE FROM clio_tokens WHERE user_id='clio-<clioUserId>'; DELETE FROM users WHERE user_id='clio-<clioUserId>';"
+# Invalidate the ciphertext cached in KV (or let the ≤300s TTL expire):
+wrangler kv key delete --binding CLIO_TOKENS "clio-token:clio-<clioUserId>"
+```
 
 ## Public-endpoint rate limiting
 

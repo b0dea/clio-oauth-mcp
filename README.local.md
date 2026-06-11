@@ -6,7 +6,7 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
 
 ---
 
-## Status — M6 deployed (hardened + cross-user isolation proven; no hosted logs; awaiting real Clio app)
+## Status — M7 build complete (M0–M7: hardened + cross-user isolation proven; evals + docs delivered; awaiting real Clio app)
 
 - **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — full two-leg OAuth + the ported tools. Leg 1
   (Claude ⇄ us) is the `@cloudflare/workers-oauth-provider` AS + RS; Leg 2 (us ⇄ Clio) is the Clio broker:
@@ -35,9 +35,11 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
   `https://clio-oauth-mcp.beatech.workers.dev/clio/callback`, then `wrangler secret put CLIO_CLIENT_ID` +
   `CLIO_CLIENT_SECRET`. That unblocks live per-user tool calls + two-user acceptance (a Leg-1 token can't be
   minted until Leg-2 completes, so authenticated `/mcp` calls stay gated until then).
-- **Engineer, start here:** `src/remote/README.md` — milestone map. **M6 done** (hardening: redirect-URI pin +
-  per-IP rate limiting + audience/PKCE/CSRF tests + the automated cross-user isolation test; M5 audit code
-  present but off by default, no table deployed); next is **M7** (evals + docs + upstream-sync runbook).
+- **Engineer, start here:** `src/remote/README.md` — milestone map. **M7 done** — all milestones complete:
+  10 read-only eval questions (`evals/clio-evals.xml`), `docs/operations.md` complete (deploy/secrets/rotation/
+  connector add-remove/rate-limit/audit/upstream-sync), and the upstream-sync dry run (clean no-op — upstream
+  unchanged since fork). M6 hardening + the automated cross-user isolation test stand; M5 audit code present but
+  off by default, no table deployed.
 - **Commands:** `npm install` · `npm run build` (stdio baseline) · `npm run typecheck:worker` · `npm run deploy`.
 - **Secrets:** `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET` are SET via `wrangler secret put`;
   `COOKIE_ENCRYPTION_KEY` is unset (the broker has no local consent page, so the provider's cookie path is bypassed).
