@@ -2,14 +2,19 @@
  * Remote MCP Worker entry — Clio multi-tenant connector.
  *
  * Additive remote shell (PRD §8): everything new lives under src/remote/ and never
- * edits upstream tool files. This skeleton serves a health check and returns 501 for
- * the not-yet-built OAuth + MCP routes, so the toolchain (wrangler deploy → MCP
- * Inspector) works end-to-end before any milestone is implemented.
+ * edits upstream tool files. M1 serves a real Streamable HTTP MCP endpoint at /mcp with
+ * one no-op tool (clio_ping); OAuth (M2) and the Clio broker (M3) routes still return 501.
  *
- * Build it out per docs/build-notes.md and the milestone map in src/remote/README.md.
- * The end state replaces this default export with `new OAuthProvider({...})` wrapping a
- * stateless `createMcpHandler` — see src/remote/README.md.
+ * Serving stack (decided — docs/build-notes.md §2): Hono + @hono/mcp's
+ * StreamableHTTPTransport over the MCP SDK's fetch-native WebStandard transport. Stateless
+ * JSON: a fresh McpServer + transport per request, no sessionIdGenerator, enableJsonResponse.
+ * M2 wraps this app in `new OAuthProvider({...})` — see src/remote/README.md.
  */
+
+import { Hono, type Context } from "hono";
+import { StreamableHTTPTransport } from "@hono/mcp";
+
+import { buildMcpServer } from "./mcp/server.js";
 
 export interface Env {
   // Bindings (declared in wrangler.jsonc)
@@ -26,35 +31,41 @@ export interface Env {
   COOKIE_ENCRYPTION_KEY?: string;
 }
 
-const notImplemented = (milestone: string): Response =>
-  Response.json({ error: "not_implemented", milestone }, { status: 501 });
+const app = new Hono<{ Bindings: Env }>();
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const { pathname } = new URL(request.url);
+app.on(["GET", "HEAD"], ["/", "/health"], (c) =>
+  c.json({
+    service: "clio-oauth-mcp",
+    status: "ok",
+    region: c.env.CLIO_REGION ?? "unset",
+    note: "M1 — /mcp live (authless). OAuth + Clio routes not yet implemented. See src/remote/README.md.",
+  }),
+);
 
-    if (pathname === "/" || pathname === "/health") {
-      return Response.json({
-        service: "clio-oauth-mcp",
-        status: "ok",
-        region: env.CLIO_REGION ?? "unset",
-        note: "Skeleton — OAuth + /mcp routes not yet implemented. See src/remote/README.md.",
-      });
-    }
+// Streamable HTTP MCP endpoint. Stateless: fresh server + transport per request, so
+// there is no cross-request session state to lose on a Worker cold start or eviction.
+// enableJsonResponse → a single POST returns a JSON-RPC response instead of an SSE stream.
+// @hono/mcp's transport defaults to a lenient Accept check (strictAcceptHeader: false), so a
+// JSON-only `Accept: application/json` is honored, not 406'd (SDK #1944).
+app.all("/mcp", async (c) => {
+  const server = buildMcpServer();
+  const transport = new StreamableHTTPTransport({ enableJsonResponse: true });
+  await server.connect(transport);
+  return (await transport.handleRequest(c)) ?? c.text("MCP transport produced no response", 500);
+});
 
-    switch (pathname) {
-      case "/.well-known/oauth-protected-resource":
-      case "/.well-known/oauth-authorization-server":
-      case "/register":
-      case "/authorize":
-      case "/token":
-        return notImplemented("M2 — Leg 1 OAuth (workers-oauth-provider)");
-      case "/clio/callback":
-        return notImplemented("M3 — Leg 2 OAuth (Clio broker)");
-      case "/mcp":
-        return notImplemented("M1/M4 — Streamable HTTP MCP endpoint");
-      default:
-        return new Response("Not found", { status: 404 });
-    }
-  },
-};
+// Not-yet-built routes return 501 so the toolchain works end-to-end before each milestone.
+const notImplemented = (milestone: string) => (c: Context) =>
+  c.json({ error: "not_implemented", milestone }, 501);
+
+const leg1 = notImplemented("M2 — Leg 1 OAuth (workers-oauth-provider)");
+app.all("/.well-known/oauth-protected-resource", leg1);
+app.all("/.well-known/oauth-authorization-server", leg1);
+app.all("/register", leg1);
+app.all("/authorize", leg1);
+app.all("/token", leg1);
+app.all("/clio/callback", notImplemented("M3 — Leg 2 OAuth (Clio broker)"));
+
+app.notFound((c) => c.text("Not found", 404));
+
+export default app;

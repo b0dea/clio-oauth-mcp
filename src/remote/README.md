@@ -7,8 +7,9 @@ verified APIs, versions, and the upstream port map.
 
 ## Start here
 
-The Worker already deploys as a skeleton (`worker.ts` returns a health check; OAuth/MCP routes
-return 501). First task is **M1**: serve a real `/mcp` with one `clio_ping` tool.
+The Worker serves a real Streamable HTTP `/mcp` (stateless JSON) with one `clio_ping` tool — **M1,
+authless**, done. The OAuth routes still return 501. Next task is **M2**: Leg 1 OAuth — wrap the Hono
+app in `new OAuthProvider({...})`.
 
 ```bash
 npm install

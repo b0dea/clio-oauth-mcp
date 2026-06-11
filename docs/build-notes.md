@@ -252,9 +252,19 @@ UK = Clio **EU** region (`eu.app.clio.com`, no UK subdomain); OAuth on the same 
 the AsyncLocalStorage injection seam; the MCP SDK ships a fetch-native WebStandard transport so the
 MCP-serving stack is **Hono + `@hono/mcp`** (no `agents`); these install zod-3-clean (verified).
 
+**Resolved at M1 (2026-06-11, verified live):**
+1. `@hono/mcp`'s `StreamableHTTPTransport` works stateless on the deployed Worker with
+   `enableJsonResponse:true` (no `sessionIdGenerator`): single-shot `tools/list`/`tools/call` need no
+   session and no prior `initialize` — the SDK transport's `validateSession()` short-circuits when
+   stateless, and `McpServer` has no init gate. SDK #1944 is avoided: `@hono/mcp@0.3.0` defaults
+   `strictAcceptHeader:false`, so a JSON-only `Accept: application/json` returns 200, not 406 (we leave
+   it at the default). Evidence in `CHANGELOG.local.md` (M1).
+
 **Still to settle at build time:**
-1. Smoke-test `@hono/mcp`'s `StreamableHTTPTransport` end-to-end on the deployed Worker with
-   `enableJsonResponse: true` + stateless (no `sessionIdGenerator`) — incl. SDK issue #1944 (a JSON-only
-   `Accept` can 406). Confirm `ctx.props` reaches the api handler (use the `WorkerEntrypoint` apiHandler
-   form if the plain `{ fetch }` form doesn't surface props).
+1. Confirm `ctx.props` reaches the api handler under `workers-oauth-provider` (M2) — use the
+   `WorkerEntrypoint` apiHandler form if the plain `{ fetch }` form doesn't surface props.
 2. Confirm the exact `fields` nesting depth (one vs two levels) against the live Clio `fields` doc.
+3. Add a global Hono `app.onError` (sanitized 500 + server-side `console.error`) at M2/M3, when real
+   error paths land (token decrypt, Clio calls). Not needed in M1: Hono's default already returns a
+   generic `Internal Server Error` 500 with no internal detail (verified), and the only M1 handler is a
+   static ping. Add it once OAuth/Clio failures are real, per PRD §7 (log server-side, non-revealing client).

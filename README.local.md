@@ -6,12 +6,12 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
 
 ---
 
-## Status — pilot deployed (skeleton)
+## Status — M1 deployed (authless `/mcp`)
 
-- **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — `/health` returns ok; OAuth + `/mcp` return 501 until built.
+- **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — `/health` + `/mcp` (Streamable HTTP, stateless JSON, `clio_ping`) return ok; OAuth routes return 501 until M2.
 - **Repo:** `b0dea/clio-oauth-mcp` (fork of `oktopeak/clio-mcp`; `upstream` remote set for merges).
 - **Provisioned** (CF `Alex@beatech.dev`, EU): D1 `clio-oauth-mcp` + KV `OAUTH_KV` + KV `CLIO_TOKENS`.
-- **Engineer, start here:** `src/remote/README.md` — milestone map. First task is **M1** (`/mcp` + `clio_ping`).
+- **Engineer, start here:** `src/remote/README.md` — milestone map. **M1 done** (`/mcp` + `clio_ping`); next is **M2** (Leg 1 OAuth).
 - **Commands:** `npm install` · `npm run build` (stdio baseline) · `npm run typecheck:worker` · `npm run deploy`.
 - **Secrets** (not set yet): `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY` via `wrangler secret put`.
 - **Moving to a new org / CF account later:** `docs/migration.md`.
@@ -86,7 +86,10 @@ Full detail in `docs/build-notes.md`.
 region (`eu.app.clio.com`); OAuth on the same regional host (not `auth.api.clio.com`); refresh tokens
 non-rotating + non-expiring. None of these block the design.
 
+**Resolved at M1:** `@hono/mcp` `StreamableHTTPTransport` runs stateless on Workers; SDK #1944
+(JSON-only `Accept` 406) avoided via its default `strictAcceptHeader:false` — verified live (see
+`CHANGELOG.local.md` / `docs/build-notes.md` §10).
+
 **Still to settle at build time (engineering spikes, not blockers):**
-1. `createMcpHandler` wiring into `OAuthProvider.apiHandler` (small spike).
-2. Smoke-test `enableJsonResponse: true` on SDK 1.29.0 (SDK issue #1944).
-3. Exact `fields` nesting depth (one vs two levels) against the live Clio docs.
+1. The Hono `/mcp` app wiring into `OAuthProvider.apiHandler` + `ctx.props` delivery (M2 spike).
+2. Exact `fields` nesting depth (one vs two levels) against the live Clio docs.

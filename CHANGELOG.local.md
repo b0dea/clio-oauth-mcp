@@ -8,6 +8,31 @@ or adds a new module (merge-safe).
 
 ---
 
+## 2026-06-11 — M1: real Streamable HTTP `/mcp` + `clio_ping` (authless)
+
+- **[new, merge-safe] `src/remote/mcp/server.ts`** — `buildMcpServer()` registers one no-op tool
+  `clio_ping` (annotations `readOnlyHint`/`idempotentHint` true, `openWorldHint` false) returning a
+  static `PING_PAYLOAD`. No Clio, no auth — that lands in M2+.
+- **[new, merge-safe] `src/remote/mcp/__tests__/server.test.ts`** — TDD: a real MCP `Client` over
+  `InMemoryTransport` asserts the tool list + the ping payload (no mocks of the server under test).
+- **[edit, merge-safe] `src/remote/worker.ts`** — replaced the `/mcp` 501 stub with a Hono app +
+  `@hono/mcp` `StreamableHTTPTransport` over the SDK's WebStandard transport. **Stateless:** fresh
+  `McpServer`+transport per request, `sessionIdGenerator` undefined, `enableJsonResponse:true`. Health
+  check + M2/M3 501 stubs preserved. (Worker-only file; not an upstream file — no merge risk.)
+- **No upstream (`src/tools/**`, etc.) files touched.** `npm run build` (stdio) + 87 tests stay green;
+  `typecheck:worker` clean.
+- **Spike resolved — `@hono/mcp` stateless on Workers (build-notes §10.1):** verified live. With no
+  `sessionIdGenerator`, the SDK transport's `validateSession()` short-circuits (no session, no
+  "not initialized" gate), so single-shot `tools/list`/`tools/call` work without a prior `initialize`
+  or `Mcp-Session-Id` — exactly the per-request shape MCP Inspector/Claude send.
+- **Spike resolved — SDK #1944 JSON-only-`Accept` 406 (build-notes §10.1):** `@hono/mcp@0.3.0`
+  defaults `strictAcceptHeader:false`, so a POST with `Accept: application/json` alone is honored, not
+  406'd. Confirmed live: `initialize` with JSON-only Accept → 200 `application/json`. We do **not** set
+  `strictAcceptHeader`. (Raw SDK transport would require both `application/json` + `text/event-stream`.)
+- **Verified live** at `https://clio-oauth-mcp.beatech.workers.dev/mcp` (version `0b22cf8f…`): JSON-RPC
+  `initialize` → `tools/list` (shows `clio_ping`) → `tools/call clio_ping` all 200 with expected payloads.
+  This is the same Streamable-HTTP path MCP Inspector drives.
+
 ## 2026-06-11 — M0: fork + remote scaffold + pilot deploy
 
 - **Forked** `oktopeak/clio-mcp` → `b0dea/clio-oauth-mcp` (GitHub fork network preserved). Local repo
@@ -53,10 +78,12 @@ or adds a new module (merge-safe).
   `COOKIE_SECRET`→`COOKIE_ENCRYPTION_KEY`; write annotations corrected (`update_task`/`complete_task`
   `destructiveHint:true`); dropped the in-MCP `clio_export_audit` tool (cross-tenant leak) for a
   documented D1 export; added an intra-user write-risk note to §7.
-- **SECURITY (action for operator):** `.mcp.json` holds a live GitHub PAT (`ghp_…`) + context7/context.dev
-  keys. It's gitignored and no git repo exists yet, so nothing is committed — but rotate the GitHub PAT;
-  treat it as exposed. Unrelated to the connector's own secrets (those go through `wrangler secret`).
-- Baseline upstream: `@oktopeak/clio-mcp@2.0.0` (MIT). Upstream SHA at fork: _TBD (record at M0)_.
+- **SECURITY (action for operator — STILL OPEN):** `.mcp.json` holds a live GitHub PAT (`ghp_…`) +
+  context7/context.dev keys. **Verified gitignored and absent from all git history** (never committed) as of
+  M1, so it is not in the repo — but it sits in plaintext on the dev machine, so **rotate the GitHub PAT**
+  and treat it as exposed. Unrelated to the connector's own secrets (those go through `wrangler secret`).
+- Baseline upstream: `@oktopeak/clio-mcp@2.0.0` (MIT). Upstream SHA at fork: `d85f3be` ("README: link to
+  Windows install guide blog post") — our work sits as commits on top; `git merge upstream/main` stays clean.
 
 <!--
 Template for real entries once the fork exists:
