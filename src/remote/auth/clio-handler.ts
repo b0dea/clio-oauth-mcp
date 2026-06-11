@@ -58,7 +58,7 @@ clioHandler.get("/authorize", async (c) => {
   }
 
   const state = await createPendingAuth(d1PendingAuthRepo(c.env.DB), authReq);
-  return c.redirect(buildClioAuthorizeUrl(cfg, callbackRedirectUri(c.req.url), state), 302);
+  return c.redirect(buildClioAuthorizeUrl(cfg, callbackRedirectUri(c.env.WORKER_BASE_URL), state), 302);
 });
 
 // Leg-2 return: Clio redirects the user here after they log in.
@@ -86,7 +86,7 @@ clioHandler.get("/clio/callback", async (c) => {
     const cfg = clioConfigFromEnv(c.env);
     const encryptionKey = requireEncryptionKey(c.env);
 
-    const tokens = await exchangeClioCode(cfg, code, callbackRedirectUri(c.req.url));
+    const tokens = await exchangeClioCode(cfg, code, callbackRedirectUri(c.env.WORKER_BASE_URL));
     const identity = await fetchClioIdentity(c.env.CLIO_REGION, tokens.accessToken);
     const userId = `clio-${identity.id}`; // stable per Clio user; no ':' (the token format reserves it)
 
@@ -121,11 +121,15 @@ clioHandler.onError((err, c) => {
 
 clioHandler.notFound((c) => c.text("Not found", 404));
 
-// The redirect_uri must be byte-identical at /authorize and at the /clio/callback token
-// exchange (OAuth requires the match), and must equal what's registered on the Clio app.
-// Deriving both from the request origin guarantees the match without hardcoding a host.
-function callbackRedirectUri(requestUrl: string): string {
-  return new URL("/clio/callback", requestUrl).toString();
+// The redirect_uri must be byte-identical at /authorize and at the /clio/callback token exchange
+// (OAuth requires the match), and must equal what's registered on the Clio app. Pin it to
+// WORKER_BASE_URL config — not the request host — so a preview URL, custom domain, or spoofed Host
+// header can never change the redirect_uri Clio sees. Fail loud if it is unset.
+export function callbackRedirectUri(baseUrl: string | undefined): string {
+  if (!baseUrl) {
+    throw new Error("WORKER_BASE_URL is not configured");
+  }
+  return new URL("/clio/callback", baseUrl).toString();
 }
 
 // Static, no client-controlled strings — safe to interpolate the fixed message.

@@ -25,11 +25,12 @@ import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 
 import { api } from "./mcp/api.js";
 import { clioHandler } from "./auth/clio-handler.js";
+import { enforcePublicRateLimit } from "./rateLimit.js";
 import type { Env } from "./env.js";
 
 export type { Env };
 
-export default new OAuthProvider<Env>({
+const provider = new OAuthProvider<Env>({
   apiRoute: ["/mcp"],
   // Object (ExportedHandler) form: the provider sets ctx.props on the same ExecutionContext
   // it passes here, and Hono surfaces it as c.executionCtx.props — so the plain bound-fetch
@@ -42,3 +43,13 @@ export default new OAuthProvider<Env>({
   // OAuth 2.1: S256 only, no plain PKCE.
   allowPlainPKCE: false,
 });
+
+// Rate-limit the public OAuth endpoints in front of the provider — the only chokepoint that also
+// covers the provider-owned /token + /register (they never reach our Hono handlers). See rateLimit.ts.
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const limited = await enforcePublicRateLimit(request, env.AUTH_RATE_LIMITER);
+    if (limited) return limited;
+    return provider.fetch(request, env, ctx);
+  },
+} satisfies ExportedHandler<Env>;

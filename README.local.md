@@ -6,7 +6,7 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
 
 ---
 
-## Status — M4 deployed (21 Clio tools ported, multi-tenant; no hosted logs; awaiting real Clio app)
+## Status — M6 deployed (hardened + cross-user isolation proven; no hosted logs; awaiting real Clio app)
 
 - **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — full two-leg OAuth + the ported tools. Leg 1
   (Claude ⇄ us) is the `@cloudflare/workers-oauth-provider` AS + RS; Leg 2 (us ⇄ Clio) is the Clio broker:
@@ -16,24 +16,31 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
   tools, each acting as the authenticated caller's own Clio account via the upstream AsyncLocalStorage seam
   (the 22nd, `upload_document`, is stdio-only — it reads a local file path a Worker can't reach). `/mcp` is
   bearer-gated.
+- **M6 hardening:** the Leg-2 `redirect_uri` is pinned to the new `WORKER_BASE_URL` var (not the request
+  host); the public OAuth endpoints (`/authorize`, `/token`, `/register`, `/clio/callback`) are rate-limited
+  per IP via the `AUTH_RATE_LIMITER` native binding (60/60s → `429`, ephemeral counters, no log); audience
+  (RFC-8707 `resource`→400), PKCE S256-only, and single-use Leg-2 CSRF state are enforced + tested. An
+  **automated cross-user isolation test** proves no path lets user A reach user B's token/data (real seam,
+  end-to-end). A security-weighted review found all M6 properties sound.
 - **No hosted logs by default (operator decision):** audit logging (M5, a D1 `audit_log`) is present but
   **off** behind `AUDIT_LOG_ENABLED` — no writer runs and the `audit_log` table isn't deployed unless
   enabled. `observability` is `false` (no Workers request logs; `wrangler tail` still works). The D1 holds
-  only the per-user OAuth token store. A token-storage security pass found **no P0** (all properties sound).
-  To enable audit: apply migrations + set the var — see `docs/operations.md`.
+  only the per-user OAuth token store. To enable audit: apply migrations + set the var — see `docs/operations.md`.
 - **Repo:** `b0dea/clio-oauth-mcp` (fork of `oktopeak/clio-mcp`; `upstream` remote set for merges).
 - **Provisioned** (CF `Alex@beatech.dev`, EU): D1 `clio-oauth-mcp` (schema applied: `users`, `clio_tokens`,
-  `pending_auth`) + KV `OAUTH_KV` + KV `CLIO_TOKENS`. Secrets set: `ENCRYPTION_KEY`;
-  `CLIO_CLIENT_ID`/`SECRET` are **placeholders** until a real Clio private app exists.
+  `pending_auth`) + KV `OAUTH_KV` + KV `CLIO_TOKENS` + Rate Limit `AUTH_RATE_LIMITER`. Secrets SET:
+  `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET` — but the Clio creds are **unconfirmed-real**
+  (real-vs-placeholder needs an interactive Clio login); treat live `/mcp` as gated until confirmed.
 - **Blocked on (operator):** register a **Clio private app** against the firm's Clio account with redirect URI
   `https://clio-oauth-mcp.beatech.workers.dev/clio/callback`, then `wrangler secret put CLIO_CLIENT_ID` +
   `CLIO_CLIENT_SECRET`. That unblocks live per-user tool calls + two-user acceptance (a Leg-1 token can't be
   minted until Leg-2 completes, so authenticated `/mcp` calls stay gated until then).
-- **Engineer, start here:** `src/remote/README.md` — milestone map. **M4 done** (tools ported, multi-tenant;
-  M5 audit code present but off by default, no table deployed); next is **M6** (hardening + automated
-  cross-user isolation test + two-user acceptance).
+- **Engineer, start here:** `src/remote/README.md` — milestone map. **M6 done** (hardening: redirect-URI pin +
+  per-IP rate limiting + audience/PKCE/CSRF tests + the automated cross-user isolation test; M5 audit code
+  present but off by default, no table deployed); next is **M7** (evals + docs + upstream-sync runbook).
 - **Commands:** `npm install` · `npm run build` (stdio baseline) · `npm run typecheck:worker` · `npm run deploy`.
-- **Secrets** (not set yet): `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY` via `wrangler secret put`.
+- **Secrets:** `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET` are SET via `wrangler secret put`;
+  `COOKIE_ENCRYPTION_KEY` is unset (the broker has no local consent page, so the provider's cookie path is bypassed).
 - **Moving to a new org / CF account later:** `docs/migration.md`.
 
 ---

@@ -8,6 +8,57 @@ or adds a new module (merge-safe).
 
 ---
 
+## 2026-06-11 — M6: hardening (redirect-URI pin + rate limiting) + automated cross-user isolation test
+
+Hardening pass + the must-pass cross-user isolation proof (PRD §M6/§7). All changes are **merge-safe**
+(new modules under `src/remote/` + `wrangler.jsonc`/`docs/` — **no upstream tool files edited**).
+
+- **Cross-user isolation test (must-pass deliverable)** — new `src/remote/mcp/__tests__/isolation.test.ts`.
+  Exercises the REAL injection seam end-to-end (two encrypted users in an in-memory `ClioTokenRepo` →
+  `getValidClioToken` → AES-256-GCM decrypt → `buildClioSessionContext` → `sessionStorage.run` → the real
+  `clio_list_matters` tool → `clioClient.resolveAccessToken` → outbound `Authorization` header), capturing the
+  Bearer to prove each turn drives Clio with only the caller's own token. Covers: A→A's token, B→B's token;
+  attacker-controlled tool args can't cross the `user_id` key; and `mcp/api.ts` fails loud (500) when the
+  authenticated props are missing / carry no `userId` (identity is from the uninfluenceable token props, never
+  caller input). Only the incidental fs-backed `appendAuditLog` is stubbed — not the token path under test.
+- **Redirect-URI pinned to config (P1 from the M5 security pass)** — `auth/clio-handler.ts` `callbackRedirectUri`
+  now derives from a new **`WORKER_BASE_URL`** var (`env.ts` + `wrangler.jsonc` vars) instead of the request
+  host, byte-identical at `/authorize` and `/clio/callback`, failing loud if unset. A preview URL, custom
+  domain, or spoofed `Host` can no longer change the `redirect_uri` Clio sees. Tested in new
+  `auth/__tests__/clio-handler.test.ts` (pinned even when the request arrives on another host).
+- **Per-IP rate limiting on the public OAuth endpoints** — new `src/remote/rateLimit.ts` +
+  `AUTH_RATE_LIMITER` native Rate Limiting binding (`wrangler.jsonc` `ratelimits`, 60/60s). `worker.ts` now
+  wraps `provider.fetch` (the only chokepoint that also covers the provider-owned `/token` + `/register`,
+  which never reach our Hono handlers); `/authorize` + `/clio/callback` + `/token` + `/register` are limited
+  per `CF-Connecting-IP` → `429` + `Retry-After`. `/mcp` excluded (bearer-gated; Clio rate-limits per token).
+  Ephemeral edge counters — **no persistent activity log**. Fails OPEN if the binding is absent (defense-in-depth,
+  not an authz gate — never brick login on a misconfig). Verified live: 60 pass / 40 → 429 from one IP.
+- **Audience / PKCE / CSRF** — verified, no gaps. Added the audience-gate test (`/authorize` missing the
+  RFC-8707 `resource` → 400) to `clio-handler.test.ts`; Leg-2 CSRF (single-use `DELETE…RETURNING` + expiry)
+  already covered by `state.test.ts`; PKCE S256-only via `allowPlainPKCE:false`.
+- **Key-rotation docs** (`docs/operations.md`) — `ENCRYPTION_KEY` rotation needs a read-all → decrypt-old →
+  re-encrypt-new → write-back migration (else every decrypt fails and all users are disconnected); `CLIO_CLIENT_ID`
+  forces re-Connect, `CLIO_CLIENT_SECRET` does not; `COOKIE_ENCRYPTION_KEY` safe anytime. Also documented the
+  rate limiter + `WORKER_BASE_URL`, and refreshed the stale "skeleton" status banner.
+
+**Quality gates:** `/simplify` (dropped a duplicate isolation case, trimmed comment repetition) + a
+security-weighted feature-dev review — **all five M6 properties sound** (isolation seam genuine end-to-end,
+redirect pinned, state single-use/expiring, PKCE+audience enforced, rate-limit path-matching correct for the
+routing topology, no new persistent logging). One P1 raised on the **pre-existing** `mcp/api.ts:81` catch-all
+(`console.error("api handler error:", err)` logs the raw error vs the `.message` guard used elsewhere) — **not
+applied**: nil security delta (a token would live in `err.message`, logged either way; the stack carries no
+tokens and aids debugging of genuine 500s) and out of the M6 diff. Flagged for a separate decision.
+
+**Verified:** `npm run build` (stdio green) · `npm run typecheck:worker` green · `npx vitest run` **154 → 168
+green** (14 new M6 tests) · `wrangler deploy` green. Live smoke: no-token
+`/mcp`→401, AS/PRM metadata→200, malformed `/authorize`→400, `/health`→200, rate limiter→429+`Retry-After`.
+Remote D1 still has **only** `users`/`clio_tokens`/`pending_auth` (no `audit_log`); `observability:false`.
+
+**Still gated (operator):** `CLIO_CLIENT_ID`/`SECRET` are SET but unconfirmed-real (real-vs-placeholder needs an
+interactive Clio login). Live two-user acceptance stays gated on a real private Clio app; isolation + hardening
+are proven via the tests + deploy smoke above. `COOKIE_ENCRYPTION_KEY` is unset (the broker has no local consent
+page, so the provider's consent-cookie path is bypassed).
+
 ## 2026-06-11 — M5 audit logging: kept but OFF by default (no DB deployed) + token-storage security pass
 
 The M5 audit code (centralized append-only D1 `audit_log`) is **retained but disabled by default** behind

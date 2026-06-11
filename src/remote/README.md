@@ -7,15 +7,22 @@ verified APIs, versions, and the upstream port map.
 
 ## Start here
 
-Both OAuth legs are live and the Clio tools are ported multi-tenant — **M4 done**. Leg 1 (Claude ⇄ us) is
-`new OAuthProvider({...})` (DCR, PKCE-S256, `/authorize`, `/token`, `/.well-known/*`); Leg 2 (us ⇄ Clio) is
-the Clio broker (`auth/clio-handler.ts`): `/authorize` → Clio, `/clio/callback` exchanges the code, reads
-`who_am_i`, encrypts the per-user tokens into D1 (`storage/`), and mints the Leg-1 token bound to the real
-Clio user. **M4:** `adapter/clioTools.ts` registers 21 upstream Clio tools `clio_`-prefixed + annotated, and
+Both OAuth legs are live, the Clio tools are ported multi-tenant, and the connector is hardened — **M6 done**.
+Leg 1 (Claude ⇄ us) is `new OAuthProvider({...})` (DCR, PKCE-S256, `/authorize`, `/token`, `/.well-known/*`);
+Leg 2 (us ⇄ Clio) is the Clio broker (`auth/clio-handler.ts`): `/authorize` → Clio, `/clio/callback` exchanges
+the code, reads `who_am_i`, encrypts the per-user tokens into D1 (`storage/`), and mints the Leg-1 token bound
+to the real Clio user. `adapter/clioTools.ts` registers 21 upstream Clio tools `clio_`-prefixed + annotated, and
 `mcp/api.ts` runs each MCP turn inside `sessionStorage.run(ctx)` so every tool resolves THIS user's token via
 the upstream `AsyncLocalStorage` seam (`adapter/sessionContext.ts` + `getUserClioToken`). Node-hostile upstream
 deps (keyring/fs) are swapped for `upstream-shims/` via the wrangler `alias` map. Live tool calls stop at
-Clio's door until a real Clio app's `CLIO_CLIENT_ID`/`SECRET` are set (placeholders for now).
+Clio's door until a real Clio app's `CLIO_CLIENT_ID`/`SECRET` are confirmed (set but unconfirmed-real).
+
+**M6 hardening:** the Leg-2 `redirect_uri` is pinned to `WORKER_BASE_URL` (not the request host); the public
+OAuth endpoints are rate-limited per IP in front of `provider.fetch` (`rateLimit.ts` + the `AUTH_RATE_LIMITER`
+native binding — the only chokepoint that also covers the provider-owned `/token` + `/register`); audience
+(RFC-8707 `resource`→400), PKCE S256-only, and single-use Leg-2 CSRF state are enforced + tested. The must-pass
+**cross-user isolation test** (`mcp/__tests__/isolation.test.ts`) proves no path lets user A reach user B's
+token/data — exercising the real token seam end-to-end (decrypt → ALS injection → real tool → outbound Bearer).
 
 **Audit logging (M5) is present but OFF by default** (operator decision — no hosted logs for the pilot).
 The sink (`storage/auditStore.ts` + the `upstream-shims/auditLog.ts` forwarder) only runs when
@@ -23,8 +30,7 @@ The sink (`storage/auditStore.ts` + the `upstream-shims/auditLog.ts` forwarder) 
 table is **not deployed** (migrations `0002`/`0003` exist but aren't applied; `wrangler deploy` doesn't apply
 migrations), and `observability:false` means no Workers request logs are stored either (`wrangler tail` still
 works). The D1 holds only the per-user OAuth token store. To enable audit: apply the migrations + set the var
-— see `docs/operations.md`. Next task is **M6**: hardening + the automated cross-user isolation test +
-two-user acceptance.
+— see `docs/operations.md`. Next task is **M7**: evals + docs + upstream-sync runbook.
 
 ```bash
 npm install

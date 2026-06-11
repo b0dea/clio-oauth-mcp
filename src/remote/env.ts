@@ -1,4 +1,5 @@
 import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+import type { RateLimiter } from "./rateLimit.js";
 
 /**
  * Worker bindings (declared in wrangler.jsonc) plus the OAuthProvider-injected helper.
@@ -9,8 +10,16 @@ export interface Env {
   OAUTH_KV: KVNamespace; // workers-oauth-provider token/client store
   CLIO_TOKENS: KVNamespace; // per-user encrypted Clio-token cache (D1 is the primary) — M3
   DB: D1Database; // per-user OAuth token store: users + clio_tokens + pending_auth — M3
+  // Native Rate Limiting binding — per-IP counters guarding the public OAuth endpoints (M6).
+  // Optional so the Worker fails OPEN if the binding is ever absent (login must not break on a
+  // misconfig); the binding is declared in wrangler.jsonc, so it is present in deploys.
+  AUTH_RATE_LIMITER?: RateLimiter;
   // Vars
   CLIO_REGION: string; // EU for the pilot — drives all Clio base + OAuth URLs (M3)
+  // Public origin of this Worker (e.g. https://clio-oauth-mcp.beatech.workers.dev). The Leg-2
+  // redirect_uri is pinned to this rather than the request host, so it always matches the URI
+  // registered on the Clio app regardless of how the request arrived. — M6
+  WORKER_BASE_URL: string;
   // Audit logging is OFF unless this is exactly "true". The pilot hosts no tool-call/connection log
   // and deploys no audit_log table by default. To enable: set this var AND apply migrations 0002/0003
   // (which create the append-only audit_log table). Unset = off. — M5

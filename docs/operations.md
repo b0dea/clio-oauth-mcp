@@ -3,8 +3,10 @@
 Operator runbook. Pilot is deployed at `https://clio-oauth-mcp.beatech.workers.dev`
 (CF account `Alex@beatech.dev`). To move it elsewhere, see `docs/migration.md`.
 
-> Status: the Worker is a **skeleton** (health check + 501 stubs). Sections marked
-> _(after Mx)_ apply once that milestone lands. The deploy/secrets/upstream-sync parts work now.
+> Status: full two-leg OAuth + 21 multi-tenant Clio tools are live (M0–M6). Each user connects
+> their own Clio account; per-user tokens are AES-256-GCM ciphertext at rest. Audit logging is
+> present but **OFF by default** (see below). Live two-user acceptance is gated on a real Clio app
+> (see "Register the Clio app").
 
 ## Deploy
 
@@ -16,7 +18,9 @@ npx wrangler deploy --dry-run --outdir /tmp/wbuild   # validate without uploadin
 npx wrangler tail             # live logs
 ```
 
-Bindings (in `wrangler.jsonc`): `OAUTH_KV`, `CLIO_TOKENS` (KV), `DB` (D1), var `CLIO_REGION=EU`.
+Bindings (in `wrangler.jsonc`): `OAUTH_KV`, `CLIO_TOKENS` (KV), `DB` (D1), `AUTH_RATE_LIMITER`
+(Rate Limiting), vars `CLIO_REGION=EU` and `WORKER_BASE_URL` (the public origin — the Leg-2
+redirect_uri is pinned to it; keep it equal to the host and to the URI registered on the Clio app).
 
 ## Secrets & key rotation
 
@@ -30,9 +34,30 @@ wrangler secret put COOKIE_ENCRYPTION_KEY   # signs the OAuth consent cookie
 wrangler secret list
 ```
 
-- **Rotate `CLIO_CLIENT_SECRET`:** rotate in the Clio Developer Portal, then `wrangler secret put`. Existing user tokens stay valid.
-- **Rotate `ENCRYPTION_KEY`** _(after M3)_: tokens at rest are only decryptable with the key that wrote them. Plan a re-encrypt pass (decrypt-with-old → encrypt-with-new) or have users re-Connect. Don't rotate it casually.
-- **Rotate `COOKIE_ENCRYPTION_KEY`:** invalidates in-flight consent cookies only; safe anytime.
+### Rotating each secret — what it forces
+
+- **`ENCRYPTION_KEY` (AES-256-GCM master key for tokens at rest) — needs a re-encrypt migration; do NOT swap it in place.**
+  Every `clio_tokens.ciphertext` row is decryptable only with the key that wrote it. Swapping the
+  secret without re-encrypting makes every `decrypt()` fail closed (GCM auth-tag mismatch), so every
+  user's next tool call errors and effectively all users are disconnected until they re-Connect.
+  To rotate without disconnecting anyone, run a one-off migration **with both keys available**:
+  1. Read all rows: `SELECT user_id, ciphertext FROM clio_tokens`.
+  2. For each: `decrypt(OLD_KEY, ciphertext)` → `encrypt(NEW_KEY, plaintext)`.
+  3. Write back the new ciphertext (`UPDATE clio_tokens SET ciphertext=?, updated_at=? WHERE user_id=?`).
+  4. Only then `wrangler secret put ENCRYPTION_KEY` (the new key) and redeploy; invalidate the
+     `CLIO_TOKENS` KV cache (it holds ciphertext — `wrangler kv key delete` the `clio-token:*` keys,
+     or just let the ≤300s TTL expire) so no row is read back under the old key.
+  `src/remote/storage/crypto.ts` exports `generateKeyBase64()` for the new 32-byte key, and
+  `encrypt`/`decrypt` are the exact primitives the migration must use. Absent this pass, the only
+  recovery is every user re-Connecting (re-runs Leg 2, writes fresh ciphertext under the new key).
+- **`CLIO_CLIENT_SECRET` — no user re-auth.** Rotate in the Clio Developer Portal, then
+  `wrangler secret put CLIO_CLIENT_SECRET`. Existing access/refresh tokens stay valid; only new code
+  exchanges/refreshes use the new secret.
+- **`CLIO_CLIENT_ID` — forces every user to re-Connect.** The client_id is baked into each user's
+  grant; changing it (or registering a new Clio app) invalidates existing authorizations, so every
+  attorney must reconnect from Claude. Treat it as a new-app event, not a rotation.
+- **`COOKIE_ENCRYPTION_KEY` — safe anytime.** Invalidates only in-flight OAuth consent cookies (a
+  user mid-connect retries); stored Clio tokens are unaffected.
 
 ## Register the Clio app (one-time)
 
@@ -41,6 +66,21 @@ One **private** app in the Clio Developer Portal (EU region) against the firm's 
 - Access permissions: read/write per `V1_WRITE_SCOPE=all`.
 - Copy `client_id`/`client_secret` into the secrets above.
 - Private app = single firm, no Clio review needed. (See `docs/build-notes.md` §0/§6.)
+
+## Public-endpoint rate limiting
+
+`/authorize`, `/token`, `/register`, and `/clio/callback` are rate-limited per client IP by the
+`AUTH_RATE_LIMITER` binding (Workers native Rate Limiting — ephemeral edge counters, **no persistent
+activity log**). Default: 60 requests / 60s per IP; over-limit gets `429` + `Retry-After: 60`. `/mcp`
+is excluded (bearer-gated; Clio rate-limits per access token).
+
+- The limit is keyed by IP. `/authorize` + `/clio/callback` carry the end user's browser IP;
+  `/token` + `/register` come from the MCP client's (shared) egress IPs — so the limit is
+  deliberately generous to avoid throttling legitimate shared-IP traffic. Raise `limit` (or set
+  `period` to 10 for a tighter window) in `wrangler.jsonc` → `ratelimits` if real traffic ever trips.
+- The Worker **fails open** if the binding is absent (a misconfig must not brick login). To verify
+  enforcement after deploy, hammer one endpoint from one IP and watch for a `429`:
+  `for i in $(seq 1 70); do curl -s -o /dev/null -w "%{http_code}\n" https://clio-oauth-mcp.beatech.workers.dev/register -X POST; done | sort | uniq -c`
 
 ## Audit / connection logging — OFF by default
 

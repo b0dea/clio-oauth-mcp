@@ -26,8 +26,11 @@
   "observability": { "enabled": false },
 
   // Region drives every Clio base + OAuth URL. EU = eu.app.clio.com (UK firm).
+  // WORKER_BASE_URL pins the Leg-2 redirect_uri to this origin (not the request host), so it always
+  // matches the URI registered on the Clio app. Update both together if the host ever changes.
   "vars": {
-    "CLIO_REGION": "EU"
+    "CLIO_REGION": "EU",
+    "WORKER_BASE_URL": "https://clio-oauth-mcp.beatech.workers.dev"
   },
 
   // Secrets are NOT here — set with `wrangler secret put`:
@@ -45,6 +48,17 @@
       "database_name": "clio-oauth-mcp",
       "database_id": "8ed13620-de9b-4cfd-8c41-b97633576612",
       "migrations_dir": "migrations"
+    }
+  ],
+
+  // Per-IP rate limit on the public OAuth endpoints (/authorize, /token, /register, /clio/callback).
+  // Ephemeral edge counters — no persistent activity log. Generous limit so shared client egress IPs
+  // (/token, /register) are not throttled; raise it if legitimate traffic ever trips. period = 10|60.
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 60, "period": 60 }
     }
   ]
 }
