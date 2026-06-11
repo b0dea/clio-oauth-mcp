@@ -7,9 +7,11 @@ verified APIs, versions, and the upstream port map.
 
 ## Start here
 
-The Worker serves a real Streamable HTTP `/mcp` (stateless JSON) with one `clio_ping` tool — **M1,
-authless**, done. The OAuth routes still return 501. Next task is **M2**: Leg 1 OAuth — wrap the Hono
-app in `new OAuthProvider({...})`.
+The Worker is wrapped in `new OAuthProvider({...})` — an OAuth 2.1 AS + RS for `/mcp` (DCR, PKCE-S256,
+`/authorize`, `/token`, `/.well-known/*`) — **M2, Leg 1 OAuth**, done. `/mcp` requires a bearer token;
+`/authorize` approves a **hardcoded dummy identity** (no Clio yet) and `clio_ping` echoes it. Next task
+is **M3**: Leg 2 — Clio OAuth client (`/authorize`→Clio, `/clio/callback`, code exchange, `who_am_i`)
++ the encrypted per-user token store. `/clio/callback` is the only remaining 501 stub.
 
 ```bash
 npm install
@@ -79,7 +81,7 @@ api.all("/mcp", async (c) => {
 
 export default new OAuthProvider({
   apiRoute: ["/mcp"],
-  apiHandler: { fetch: api.fetch.bind(api) },  // ctx.props delivered here (use a WorkerEntrypoint if props don't surface)
+  apiHandler: { fetch: api.fetch.bind(api) },  // ctx.props delivered as c.executionCtx.props (confirmed M2 — no WorkerEntrypoint needed)
   defaultHandler: ClioHandler,                 // Leg 2: /authorize→Clio, /clio/callback, completeAuthorization({ props })
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/token",

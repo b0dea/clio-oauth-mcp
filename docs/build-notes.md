@@ -260,11 +260,18 @@ MCP-serving stack is **Hono + `@hono/mcp`** (no `agents`); these install zod-3-c
    `strictAcceptHeader:false`, so a JSON-only `Accept: application/json` returns 200, not 406 (we leave
    it at the default). Evidence in `CHANGELOG.local.md` (M1).
 
+**Resolved at M2 (2026-06-11, verified live):**
+1. **`ctx.props` reaches the api handler with the plain `{ fetch }` form** — no `WorkerEntrypoint`
+   needed. `workers-oauth-provider` sets `ctx.props` on the *same* `ExecutionContext` it then passes
+   to `apiHandler.fetch(request, env, ctx)` (`dist/oauth-provider.js` lines 2025 + 2054, `handleApiRequest`);
+   Hono re-exposes that object as `c.executionCtx.props`. So `apiHandler: { fetch: api.fetch.bind(api) }`
+   delivers the decrypted grant props. Proven live: an authenticated `clio_ping` echoes the injected
+   `authenticatedUser`. Audience binding is provider-driven off the client's RFC 8707 `resource` param;
+   we additionally **require** `resource` at `/authorize` so a resource-less client can't obtain an
+   audience-less (unbound) token (the provider only audience-checks tokens that *have* an audience).
+3. **Global Hono `app.onError`** (sanitized 500 + server-side `console.error`) added to both the api
+   and default handlers, plus `try/catch` around the `parseAuthRequest` / `completeAuthorization` paths
+   (bad-client requests → 400, non-revealing). This is the deferred-from-M1 error path (PRD §7).
+
 **Still to settle at build time:**
-1. Confirm `ctx.props` reaches the api handler under `workers-oauth-provider` (M2) — use the
-   `WorkerEntrypoint` apiHandler form if the plain `{ fetch }` form doesn't surface props.
-2. Confirm the exact `fields` nesting depth (one vs two levels) against the live Clio `fields` doc.
-3. Add a global Hono `app.onError` (sanitized 500 + server-side `console.error`) at M2/M3, when real
-   error paths land (token decrypt, Clio calls). Not needed in M1: Hono's default already returns a
-   generic `Internal Server Error` 500 with no internal detail (verified), and the only M1 handler is a
-   static ping. Add it once OAuth/Clio failures are real, per PRD §7 (log server-side, non-revealing client).
+2. Confirm the exact `fields` nesting depth (one vs two levels) against the live Clio `fields` doc (M4).

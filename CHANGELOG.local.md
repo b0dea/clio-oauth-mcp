@@ -8,6 +8,57 @@ or adds a new module (merge-safe).
 
 ---
 
+## 2026-06-11 — M2: Leg 1 OAuth (Claude ⇄ us) via `@cloudflare/workers-oauth-provider`
+
+Wrapped the Worker in `new OAuthProvider({...})` so it is an OAuth 2.1 Authorization Server +
+Resource Server for `/mcp`. Clio is not involved yet — `/authorize` approves a hardcoded dummy
+identity (`dummy-user`); real per-user Clio login is M3. All new code under `src/remote/`; **no
+upstream (`src/tools/**`) files touched.** `npm run build` (stdio) + 88 tests green; `typecheck:worker` clean.
+
+- **[new, merge-safe] `src/remote/env.ts`** — `Env` bindings + the `OAUTH_PROVIDER: OAuthHelpers`
+  the provider injects, plus `ConnectorProps` (the grant-props shape decrypted onto `ctx.props`).
+  In its own module so the api + default handlers import it without an import cycle through `worker.ts`.
+- **[new, merge-safe] `src/remote/mcp/api.ts`** — the provider `apiHandler` (apiRoute `["/mcp"]`).
+  Reads the decrypted props off `c.executionCtx.props` and injects `{ userId }` into the
+  per-request MCP server. Stateless serving stack unchanged from M1.
+- **[new, merge-safe] `src/remote/auth/default-handler.ts`** — the provider `defaultHandler`:
+  `/health`, the `/authorize` consent page (approve → `completeAuthorization` with dummy props),
+  and the M3 `/clio/callback` 501 stub. Global `onError` → sanitized 500 + server-side `console.error`
+  (the deferred-from-M1 error path, now that token/auth failures are real).
+- **[edit, merge-safe] `src/remote/worker.ts`** — replaced the M1 Hono app + 501 stubs with
+  `new OAuthProvider<Env>({ apiRoute:["/mcp"], apiHandler, defaultHandler, authorize/token/register
+  endpoints, allowPlainPKCE:false })`. The provider now OWNS `/token`, `/register`, and the RFC 8414 /
+  RFC 9728 metadata endpoints — the M1 501 stubs for those are **deleted** (not re-implemented).
+- **[edit, merge-safe] `src/remote/mcp/server.ts` (+ test)** — `buildMcpServer(auth?)`; `clio_ping`
+  echoes `authenticatedUser` (the injected subject). TDD: a new test asserts the echo over a real
+  in-memory MCP client (no mocks of the server under test).
+
+- **Spike resolved — `ctx.props` delivery (build-notes §10.1):** the plain object apiHandler form
+  `{ fetch: api.fetch.bind(api) }` DOES surface props — no `WorkerEntrypoint` needed. The provider
+  sets `ctx.props` on the **same** `ExecutionContext` it passes to `apiHandler.fetch(request, env, ctx)`
+  (dist `oauth-provider.js` lines 2025 + 2054); Hono re-exposes it as `c.executionCtx.props`. Proven
+  live: an authenticated `clio_ping` returns `authenticatedUser:"dummy-user"`.
+- **Security — audience binding enforced server-side (security-weighted review finding).** The
+  provider only validates token audience when one is present (`if (tokenData.audience)`), and an
+  audience is only set when the client sends the RFC 8707 `resource` param. So a client that omits
+  `resource` would get an audience-less token that passes the `/mcp` gate for any resource. `/authorize`
+  now rejects a missing `resource` with 400 — every minted token is audience-bound to the canonical
+  `/mcp` URL, closing the confused-deputy gap (build-notes §1). Verified live: wrong-audience token →
+  401 "Invalid audience"; missing `resource` → 400.
+- **OAuth 2.1 hardening:** `allowPlainPKCE:false` (S256-only, advertised in metadata); public-client
+  DCR left enabled (Claude registers as a public + PKCE client).
+
+- **Verified live** at `https://clio-oauth-mcp.beatech.workers.dev` (version `f211d9f4…`):
+  - no-token `/mcp` → **401** + `WWW-Authenticate: Bearer realm="OAuth", resource_metadata=".../.well-known/oauth-protected-resource/mcp", error="invalid_token"`.
+  - PRM `/.well-known/oauth-protected-resource/mcp` → `resource: .../mcp` (path-aware; **no host hardcoded** in TS). AS metadata → `code_challenge_methods_supported:["S256"]`, grants `authorization_code`+`refresh_token`.
+  - Full dance (DCR → PKCE-S256 `/authorize` → `/token` → bearer `/mcp`) → `tools/call clio_ping` returns `authenticatedUser:"dummy-user"`. Wrong-audience and missing-`resource` rejected.
+- **Quality gates:** `/simplify` (folded `ConnectorProps` into `env.ts`, dropped redundant `default`
+  exports, trimmed a speculative props field) then a security-weighted code review (feature-dev
+  reviewer) — its one actionable finding (audience enforcement, above) applied.
+- **Carried to M3 (review notes, not M2 bugs):** the `/authorize` consent is GET-approve with a dummy
+  identity (CSRF-moot while every grant is the same user); M3's real-user flow must POST/nonce the
+  approval and HTML-escape any `ClientInfo` strings (`clientName`, `clientUri`, …) it renders.
+
 ## 2026-06-11 — M1: real Streamable HTTP `/mcp` + `clio_ping` (authless)
 
 - **[new, merge-safe] `src/remote/mcp/server.ts`** — `buildMcpServer()` registers one no-op tool

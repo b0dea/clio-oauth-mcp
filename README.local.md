@@ -6,12 +6,17 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
 
 ---
 
-## Status — M1 deployed (authless `/mcp`)
+## Status — M2 deployed (Leg 1 OAuth live)
 
-- **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — `/health` + `/mcp` (Streamable HTTP, stateless JSON, `clio_ping`) return ok; OAuth routes return 501 until M2.
+- **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — the Worker is now an OAuth 2.1 AS + RS
+  (`@cloudflare/workers-oauth-provider`). `/mcp` requires a bearer token (no-token → 401 +
+  `WWW-Authenticate` resource-metadata pointer); DCR + PKCE-S256 + `/.well-known/*` metadata work
+  end-to-end. `/authorize` approves a **hardcoded dummy identity** (real Clio login is M3); an
+  authenticated `clio_ping` echoes the connected user. `/clio/callback` returns 501 until M3.
 - **Repo:** `b0dea/clio-oauth-mcp` (fork of `oktopeak/clio-mcp`; `upstream` remote set for merges).
 - **Provisioned** (CF `Alex@beatech.dev`, EU): D1 `clio-oauth-mcp` + KV `OAUTH_KV` + KV `CLIO_TOKENS`.
-- **Engineer, start here:** `src/remote/README.md` — milestone map. **M1 done** (`/mcp` + `clio_ping`); next is **M2** (Leg 1 OAuth).
+- **Engineer, start here:** `src/remote/README.md` — milestone map. **M2 done** (Leg 1 OAuth); next is
+  **M3** (Leg 2 — Clio OAuth client + encrypted per-user token store).
 - **Commands:** `npm install` · `npm run build` (stdio baseline) · `npm run typecheck:worker` · `npm run deploy`.
 - **Secrets** (not set yet): `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY` via `wrangler secret put`.
 - **Moving to a new org / CF account later:** `docs/migration.md`.
@@ -90,6 +95,9 @@ non-rotating + non-expiring. None of these block the design.
 (JSON-only `Accept` 406) avoided via its default `strictAcceptHeader:false` — verified live (see
 `CHANGELOG.local.md` / `docs/build-notes.md` §10).
 
+**Resolved at M2 (2026-06-11):** the Hono `/mcp` app wires into `OAuthProvider.apiHandler` as the
+plain `{ fetch: api.fetch.bind(api) }` object form, and `ctx.props` is delivered through it as
+`c.executionCtx.props` (no `WorkerEntrypoint` needed) — see `docs/build-notes.md` §10 + `CHANGELOG.local.md`.
+
 **Still to settle at build time (engineering spikes, not blockers):**
-1. The Hono `/mcp` app wiring into `OAuthProvider.apiHandler` + `ctx.props` delivery (M2 spike).
-2. Exact `fields` nesting depth (one vs two levels) against the live Clio docs.
+1. Exact `fields` nesting depth (one vs two levels) against the live Clio docs (M4).
