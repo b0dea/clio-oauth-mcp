@@ -8,79 +8,31 @@ or adds a new module (merge-safe).
 
 ---
 
-## 2026-06-11 — M5: centralized append-only D1 audit log (compliance)
+## 2026-06-11 — M5 audit logging: added, then removed (no hosted logs for the pilot)
 
-Every Clio tool call now writes exactly one append-only audit row to D1, attributed to the
-authenticated user, with secret-named args redacted. **No upstream `src/tools/**`, `src/utils/**`, or
-`src/auth/**` file is edited** — all new code under `src/remote/` + `migrations/`. The 21 tools already
-call `appendAuditLog(...)` on every success/error/not_found path, so the work is purely in filling the
-no-op shim and wiring a per-request sink — zero tool edits.
+M5 (centralized append-only D1 `audit_log`) was built, reviewed, and deployed earlier today, then
+**fully reverted** the same day on the operator's decision: **the pilot will not host any audit log or
+connection log** in Cloudflare (or anywhere) for now — we just need the MCP↔Clio OAuth connection.
+Net delta vs upstream from M5 is therefore **zero**; this entry records the round-trip so the history
+is honest.
 
-New (merge-safe):
-- **`storage/auditStore.ts`** — the sink, mirroring `tokenStore.ts`'s interface + adapter split.
-  `redactArgs()` (ported verbatim from upstream — the fs-backed module is aliased out of the Worker,
-  so it can't be imported) masks `access_token`/`refresh_token`/`client_secret`/`password`/`token`/
-  `encryption_key` (case-insensitive, recurses objects). `writeAuditEntry(repo, identity, event)`
-  redacts, stamps `created_at`, and assembles the row — unit-tested against an in-memory `AuditRepo`.
-  `d1AuditRepo` is the thin INSERT-only adapter (verified live).
-- **`migrations/0002_audit_log.sql`** — append-only `audit_log` (`id` AUTOINCREMENT, `user_id`,
-  `clio_user_id`, `session_id`, `tool`, `args` redacted JSON, `outcome`, `error_message`, `matter_id`,
-  `result_count`, `created_at` epoch ms), indexed `(user_id, created_at)` for export.
-- **`migrations/0003_audit_log_append_only.sql`** — `BEFORE UPDATE`/`BEFORE DELETE` triggers that
-  `RAISE(ABORT, 'audit_log is append-only')`, so the compliance record can't be tampered with even via
-  an ad-hoc `wrangler d1 execute` — append-only is a DB-enforced invariant, not just a convention.
-  Both migrations applied remote.
+Removed (was M5, now gone):
+- `src/remote/storage/auditStore.ts` (+ its test) and `src/remote/upstream-shims/__tests__/auditLog.test.ts`.
+- `migrations/0002_audit_log.sql` + `migrations/0003_audit_log_append_only.sql`. The `audit_log` table
+  and its append-only triggers were **dropped from the remote D1**, and the `0002`/`0003` rows removed
+  from `d1_migrations` — remote is back to `0001` only.
+- The wiring in `mcp/api.ts`, `adapter/sessionContext.ts`, `env.ts`, and `upstream-shims/auditLog.ts`
+  was reverted to the M4 state. The shim is again a **no-op** (it must still exist — the 21 tools import
+  it via the wrangler `alias`, and it keeps the fs-backed upstream module out of the Worker bundle).
 
-Changed (merge-safe, worker-only):
-- **`upstream-shims/auditLog.ts`** — was a no-op; now reads the per-request audit writer off the
-  `SessionContext` and `await`s it inside a `try/catch` (durable + best-effort: a failed write logs the
-  tool name and is swallowed, never thrown into the tool call — PRD §M5).
-- **`adapter/sessionContext.ts`** — `ClioSessionContext` carries an optional `appendAudit` closure on
-  the same context object the token seam uses (**no second AsyncLocalStorage**, per the task); only our
-  Worker shim reads it. `buildClioSessionContext` takes the writer as a 3rd arg.
-- **`mcp/api.ts`** — builds the writer bound to `{d1AuditRepo(env.DB), userId, props.clioUserId}` and
-  injects it through `buildClioSessionContext`. Identity is the authenticated subject — sourced from the
-  token props, never from tool args (a test pins this).
+Kept (these are the OAuth connection, not logs):
+- The D1 token store (`users`, `clio_tokens`, `pending_auth`) and both KV namespaces. Per-user Clio
+  tokens must persist (encrypted) so the connection can refresh them — deleting them would break Leg 2.
+- **`observability` set to `false`** in `wrangler.jsonc`: the pilot persists no Workers request/connection
+  logs in Cloudflare. Live debugging still works via `wrangler tail` (real-time, independent of this).
 
-Decisions (investigated, not assumed):
-- **Durability over latency.** The shim **`await`s the INSERT** so the row is committed before the tool
-  returns — correct for a legal/compliance log. Rejected `executionCtx.waitUntil(insert)` (non-blocking
-  but can drop the row on eviction). Cost: one same-region D1 write (~sub-ms) per tool call.
-- **Identity is uninfluenceable.** `user_id`/`session_id`/`clio_user_id` come from the access-token
-  props, **not** from `ctx.getTokens()` (our `SessionContext` throws on that — it's a dropped member).
-- **`tool`** stores the upstream name (`list_matters`), not the `clio_`-prefixed surface name — that's
-  what the tool passes to `appendAuditLog`. Documented in the migration.
-- **Out-of-band export only** (PRD §M5): no in-MCP `export_audit_log` tool. A `wrangler d1 execute`
-  export query is documented in `docs/operations.md` (and the speculative pre-M5 query there, which
-  named a non-existent `ts` column, was corrected to the real `created_at`-epoch-ms schema).
-
-Quality gates (`/simplify` then a security-weighted feature-dev review):
-- `/simplify`: `AuditRow extends AuditIdentity` (drop the duplicated identity fields). Kept the
-  camel-TS/snake-SQL split and the per-call `db.prepare` to match the sibling `d1TokenRepo` shape.
-- Security review — all four focus properties came back **sound** (redaction incl. the `error_message`
-  path, per-user isolation, append-only, non-fatal). Applied: (P1) `session_id` is now a fresh
-  per-request `crypto.randomUUID()` (was `= user_id`, a meaningless duplicate) so an auditor can group
-  one MCP turn / tell concurrent same-user requests apart; (P2) `error_message` capped at 500 chars so
-  a large Clio error body can't bloat a row; (P2) the non-fatal test now asserts zero rows on a failed
-  write. Skipped (noted): a DB `CHECK` on `outcome` — it's trusted, upstream-typed, never caller input,
-  and adding it to the applied table needs a heavy rebuild.
-- The append-only DB triggers (0003) came out of the `/simplify` altitude pass: the invariant was
-  comment-only on a self-declared compliance table; it's now structurally enforced.
-
-Verified: `npm run build` (stdio) + `typecheck:worker` + **154 tests** (16 new: redaction, the
-snake→row mapping, `error_message` cap, per-user attribution, append-only-INSERT, and the shim's
-injection + non-fatal-zero-rows paths) green. `wrangler deploy` (live, boots ~66 ms); bundle contains
-`INSERT INTO audit_log` and **none** of `appendFile`/`homedir`/`networkInterfaces`/`.clio-mcp`.
-Migrations applied remote — `audit_log` + `idx_audit_log_user_created` + both append-only triggers
-present; `UPDATE`/`DELETE` abort with `SQLITE_CONSTRAINT_TRIGGER` (verified on a local DB so as not to
-seed the compliance table); export query runs (0 rows). No-token `/mcp` → 401.
-
-**PENDING (needs a real Clio private app — same gate as M3/M4):** a **live** audit row requires an
-authenticated `/mcp` tool call, which requires completing Leg-2 (Clio login) with real
-`CLIO_CLIENT_ID`/`SECRET` — recorded as placeholders since M3. The secrets exist (`wrangler secret list`)
-but the list can't distinguish real from placeholder, and confirming requires an interactive Clio login,
-so the live audit-row write stays gated. The sink itself is proven by the unit/integration tests + the
-live migration + the empty export query.
+If audit logging is wanted later, it's a clean re-add (a sink module + a migration + a few lines of
+api.ts wiring); design notes are in this CHANGELOG's git history (commit `aa46fe4`).
 
 ---
 

@@ -7,20 +7,21 @@ verified APIs, versions, and the upstream port map.
 
 ## Start here
 
-Both OAuth legs are live, the Clio tools are ported multi-tenant, and every tool call is audited — **M5 done**.
-Leg 1 (Claude ⇄ us) is `new OAuthProvider({...})` (DCR, PKCE-S256, `/authorize`, `/token`, `/.well-known/*`);
-Leg 2 (us ⇄ Clio) is the Clio broker (`auth/clio-handler.ts`): `/authorize` → Clio, `/clio/callback` exchanges
-the code, reads `who_am_i`, encrypts the per-user tokens into D1 (`storage/`), and mints the Leg-1 token bound
-to the real Clio user. **M4:** `adapter/clioTools.ts` registers 21 upstream Clio tools `clio_`-prefixed +
-annotated, and `mcp/api.ts` runs each MCP turn inside `sessionStorage.run(ctx)` so every tool resolves THIS
-user's token via the upstream `AsyncLocalStorage` seam (`adapter/sessionContext.ts` + `getUserClioToken`).
-**M5:** the same per-request `SessionContext` also carries an audit-write closure bound to `{env.DB, userId,
-clioUserId}`; `upstream-shims/auditLog.ts` forwards each tool call to it, and `storage/auditStore.ts` redacts
-the args and appends one row to the append-only D1 `audit_log` (durable, best-effort — a failed write never
-breaks the call). Export is out-of-band only (`docs/operations.md`). Node-hostile upstream deps (keyring/fs)
-are swapped for `upstream-shims/` via the wrangler `alias` map. Live per-user tool calls (and thus live audit
-rows) stop at Clio's door until a real Clio app's `CLIO_CLIENT_ID`/`SECRET` are set (placeholders for now).
-Next task is **M6**: hardening + the automated cross-user isolation test + two-user acceptance.
+Both OAuth legs are live and the Clio tools are ported multi-tenant — **M4 done**. Leg 1 (Claude ⇄ us) is
+`new OAuthProvider({...})` (DCR, PKCE-S256, `/authorize`, `/token`, `/.well-known/*`); Leg 2 (us ⇄ Clio) is
+the Clio broker (`auth/clio-handler.ts`): `/authorize` → Clio, `/clio/callback` exchanges the code, reads
+`who_am_i`, encrypts the per-user tokens into D1 (`storage/`), and mints the Leg-1 token bound to the real
+Clio user. **M4:** `adapter/clioTools.ts` registers 21 upstream Clio tools `clio_`-prefixed + annotated, and
+`mcp/api.ts` runs each MCP turn inside `sessionStorage.run(ctx)` so every tool resolves THIS user's token via
+the upstream `AsyncLocalStorage` seam (`adapter/sessionContext.ts` + `getUserClioToken`). Node-hostile upstream
+deps (keyring/fs) are swapped for `upstream-shims/` via the wrangler `alias` map. Live tool calls stop at
+Clio's door until a real Clio app's `CLIO_CLIENT_ID`/`SECRET` are set (placeholders for now).
+
+**Audit/connection logging is intentionally NOT hosted** for the pilot (operator decision). M5 (a D1
+`audit_log`) was built and then removed; `upstream-shims/auditLog.ts` is a no-op and the Worker persists no
+tool-call or request log (`observability:false`; `wrangler tail` still works for live debugging). The D1 here
+holds only the per-user OAuth token store — see CHANGELOG `2026-06-11 — M5 … added, then removed`. Next task
+is **M6**: hardening + the automated cross-user isolation test + two-user acceptance.
 
 ```bash
 npm install
@@ -50,7 +51,7 @@ wrangler secret put COOKIE_ENCRYPTION_KEY   # signs the consent cookie
 | M3 | Leg 2 — Clio OAuth client (`/authorize`→Clio, `/clio/callback`, code exchange, `who_am_i`) | `auth/clio-handler.ts` |
 | M3 | Per-user encrypted token store (AES-256-GCM via SubtleCrypto; D1 primary, KV cache) | `storage/` |
 | M4 | Registration adapter — prefix tools `clio_`, inject the per-user Clio client via the upstream `AsyncLocalStorage` seam | `adapter/` |
-| M5 | Centralized audit log → D1 `audit_log` (append-only); writer rides the per-request `SessionContext` | `storage/auditStore.ts` + `upstream-shims/auditLog.ts` |
+| M5 | Centralized audit log → built then removed (pilot hosts no logs). If re-added: a D1 sink + migration + a few lines of `mcp/api.ts` | — (none) |
 
 ## The injection seam (no tool edits)
 

@@ -42,33 +42,19 @@ One **private** app in the Clio Developer Portal (EU region) against the firm's 
 - Copy `client_id`/`client_secret` into the secrets above.
 - Private app = single firm, no Clio review needed. (See `docs/build-notes.md` §0/§6.)
 
-## Read the audit log (M5)
+## Audit / connection logging — NOT hosted (by decision)
 
-Audit is append-only in D1 (`audit_log`), one row per Clio tool call (`src/remote/storage/auditStore.ts`).
-Export is **out-of-band only** — never an in-MCP tool (in a per-user OAuth model every user holds an
-identical token shape, so an in-band export would read across tenants; PRD §M5/§7). Query D1 directly.
+The pilot intentionally persists **no** audit log or connection log. M5 (a D1 `audit_log`) was built
+and then removed; the `audit_log` table and its triggers were dropped from the remote D1, and Workers
+`observability` is `false` (no request/connection logs stored in Cloudflare).
 
-`created_at` is epoch **ms** — convert with `datetime(created_at/1000,'unixepoch')`. Rows are
-attributed by `user_id` (our stable `clio-<clioUserId>` subject) and `clio_user_id`. If the account
-has more than one Cloudflare account, prefix with `CLOUDFLARE_ACCOUNT_ID=<id>`.
-
-```bash
-# One user's full trail, oldest first (uses the (user_id, created_at) index):
-wrangler d1 execute clio-oauth-mcp --remote --command \
-  "SELECT datetime(created_at/1000,'unixepoch') AS ts_utc, tool, outcome, error_message, matter_id, result_count, args \
-     FROM audit_log WHERE user_id = 'clio-<clioUserId>' ORDER BY created_at;"
-
-# Recent activity across all users:
-wrangler d1 execute clio-oauth-mcp --remote --command \
-  "SELECT datetime(created_at/1000,'unixepoch') AS ts_utc, user_id, clio_user_id, tool, outcome, result_count \
-     FROM audit_log ORDER BY created_at DESC LIMIT 50;"
-```
-
-`args` is redacted JSON — secret-named keys (`access_token`, `refresh_token`, `client_secret`,
-`password`, `token`, `encryption_key`) are masked to `[REDACTED]` at write time, so secrets/PII never
-land in the table. The table is append-only and **enforced** as such: DB triggers (migrations/0003)
-abort any `UPDATE`/`DELETE` on `audit_log` with `audit_log is append-only`, so even an ad-hoc
-`wrangler d1 execute` cannot tamper with the compliance record.
+- The only persistent store is the per-user **OAuth token** D1 (`users`, `clio_tokens`, `pending_auth`)
+  — credentials the connection needs, not activity logs. Tokens are AES-256-GCM ciphertext at rest.
+- For live debugging, `wrangler tail` streams logs in real time (nothing is retained server-side).
+- If audit logging is wanted later, re-add a D1 sink + a migration + a few lines of `mcp/api.ts`
+  wiring (the removed implementation is in git history, commit `aa46fe4`). Keep export **out-of-band**
+  only — never an in-MCP tool (every user holds an identical token shape, so an in-band export would
+  read across tenants; PRD §7).
 
 ## Upstream sync runbook (keep pulling Clio fixes)
 

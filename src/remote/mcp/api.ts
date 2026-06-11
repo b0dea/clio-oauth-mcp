@@ -13,8 +13,7 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { buildMcpServer, type McpDeps } from "./server.js";
 import { getUserClioToken } from "../clio/connector.js";
 import { fetchClioIdentity } from "../clio/oauth.js";
-import { buildClioSessionContext, type AuditWriter } from "../adapter/sessionContext.js";
-import { d1AuditRepo, writeAuditEntry } from "../storage/auditStore.js";
+import { buildClioSessionContext } from "../adapter/sessionContext.js";
 import { sessionStorage } from "../../utils/sessionContext.js";
 import type { Env, ConnectorProps } from "../env.js";
 
@@ -47,16 +46,6 @@ api.all("/mcp", async (c) => {
     },
   };
 
-  // Per-request audit writer (M5): bound to this user's identity and env.DB, attached to the
-  // SessionContext so the upstream auditLog shim persists each tool call without reaching env or the
-  // identity itself. Identity comes from the authenticated props (uninfluenceable), never from tool
-  // args. The D1 write is awaited inside the shim (durable) but best-effort (failures are non-fatal).
-  // session_id is a fresh per-request id so an auditor can group the tool calls of one MCP turn
-  // (e.g. a JSON-RPC batch) and tell concurrent requests from the same user apart.
-  const auditRepo = d1AuditRepo(env.DB);
-  const auditIdentity = { userId, clioUserId: props.clioUserId, sessionId: crypto.randomUUID() };
-  const appendAudit: AuditWriter = (event) => writeAuditEntry(auditRepo, auditIdentity, event);
-
   // Run the whole MCP turn inside upstream's AsyncLocalStorage so every ported tool's
   // resolveAccessToken() resolves THIS user's Clio token (clioClient.ts reads this context). The
   // context is always populated, so the stdio disk/browser fallback never fires on the Worker.
@@ -64,7 +53,7 @@ api.all("/mcp", async (c) => {
   // process.env.CLIO_REGION (the EU worker var), so all users hit eu.app.clio.com — correct for the
   // single-region pilot. Per-user routing off the stored clioRegion is deferred (would need the
   // do-not-edit clioClient to read the region from this context).
-  const ctx = buildClioSessionContext(userId, async () => (await getUserClioToken(env, userId)).accessToken, appendAudit);
+  const ctx = buildClioSessionContext(userId, async () => (await getUserClioToken(env, userId)).accessToken);
   return sessionStorage.run(ctx, async () => {
     const server = buildMcpServer(deps);
     const transport = new StreamableHTTPTransport({ enableJsonResponse: true });

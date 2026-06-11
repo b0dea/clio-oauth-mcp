@@ -21,7 +21,9 @@
     "../auth/tokenStorage.js": "./src/remote/upstream-shims/tokenStorage.ts",
     "./tokenStorage.js": "./src/remote/upstream-shims/tokenStorage.ts"
   },
-  "observability": { "enabled": true },
+  // Persisted Workers Logs OFF: the pilot hosts no connection/request logs in Cloudflare by default.
+  // Live debugging still works via `wrangler tail` (real-time stream, independent of this setting).
+  "observability": { "enabled": false },
 
   // Region drives every Clio base + OAuth URL. EU = eu.app.clio.com (UK firm).
   "vars": {

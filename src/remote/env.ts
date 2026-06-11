@@ -8,7 +8,7 @@ import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 export interface Env {
   OAUTH_KV: KVNamespace; // workers-oauth-provider token/client store
   CLIO_TOKENS: KVNamespace; // per-user encrypted Clio-token cache (D1 is the primary) — M3
-  DB: D1Database; // users + audit (+ primary token rows) — M3
+  DB: D1Database; // per-user OAuth token store: users + clio_tokens + pending_auth — M3
   // Vars
   CLIO_REGION: string; // EU for the pilot — drives all Clio base + OAuth URLs (M3)
   // Secrets (set via `wrangler secret put`). Optional so the Worker type-checks before

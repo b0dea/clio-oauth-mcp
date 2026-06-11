@@ -12,24 +12,6 @@
 
 import type { SessionContext } from "../../utils/sessionContext.js";
 import type { ClioTokens } from "../../auth/oauth.js";
-import type { AuditEvent } from "../storage/auditStore.js";
-
-/**
- * The per-request audit-write capability (M5). Bound to {DB, userId, clioUserId} in mcp/api.ts and
- * attached to the SessionContext below, so the upstream-shims/auditLog.ts shim can persist a row
- * without reaching env.DB or the user identity itself. Best-effort: callers treat a rejection as
- * non-fatal.
- */
-export type AuditWriter = (event: AuditEvent) => Promise<void>;
-
-/**
- * The upstream SessionContext plus the Worker-only per-request audit capability. The extra member
- * rides on the same context object the token seam uses (no second AsyncLocalStorage); only our
- * Worker shim reads it, casting back to this type.
- */
-export interface ClioSessionContext extends SessionContext {
-  appendAudit?: AuditWriter;
-}
 
 function unsupported(member: string): never {
   throw new Error(
@@ -38,25 +20,19 @@ function unsupported(member: string): never {
   );
 }
 
-export function buildClioSessionContext(
-  userId: string,
-  resolveAccessToken: () => Promise<string>,
-  appendAudit?: AuditWriter,
-): SessionContext {
+export function buildClioSessionContext(userId: string, resolveAccessToken: () => Promise<string>): SessionContext {
   // Resolve once per request — paginated/multi-step tool calls share one token lookup. A failure is
   // not memoized: clear it so a transient D1/KV/refresh error doesn't poison the rest of the turn.
   let token: Promise<string> | undefined;
-  const ctx: ClioSessionContext = {
+  return {
     sessionId: userId,
     getAccessToken: () => (token ??= resolveAccessToken().catch((err) => {
       token = undefined;
       throw err;
     })),
-    appendAudit,
     storeTokens: (_tokens: ClioTokens) => unsupported("storeTokens"),
     getTokens: () => unsupported("getTokens"),
     clearTokens: () => unsupported("clearTokens"),
     setPendingNonce: (_nonce: string) => unsupported("setPendingNonce"),
   };
-  return ctx;
 }
