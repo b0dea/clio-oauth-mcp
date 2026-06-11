@@ -8,6 +8,67 @@ or adds a new module (merge-safe).
 
 ---
 
+## 2026-06-11 — M3: Leg 2 OAuth (us ⇄ Clio) + per-user encrypted token store
+
+Each user now connects their own Clio account: `/authorize` redirects to Clio, `/clio/callback`
+exchanges the code, reads `who_am_i`, encrypts+stores the per-user tokens, and mints the Leg-1 token
+bound to the real Clio identity. `clio_whoami` proves it end-to-end. All new code under `src/remote/`;
+**no upstream (`src/tools/**`, `src/auth/**`, `src/utils/**`) files touched.**
+
+New modules (all merge-safe):
+- **`storage/crypto.ts`** — AES-256-GCM via WebCrypto SubtleCrypto (random 12-byte IV/record, GCM tag,
+  32-byte key from `ENCRYPTION_KEY`). Workers rewrite of upstream `tokenStorage.ts` (Node crypto/keyring/fs).
+- **`storage/tokenStore.ts`** — per-user token store. **D1 is the source of truth** (read-your-writes for
+  refresh correctness; KV cache deferred to M4's hot path). `getValidClioToken` decrypts + transparently
+  refreshes + persists; `saveClioConnection` upserts. A `ClioTokenRepo` seam keeps the refresh/crypto logic
+  unit-tested against real crypto with an in-memory repo; `d1TokenRepo` is the thin SQL adapter.
+- **`clio/oauth.ts`** — Worker-native Clio OAuth client (region host map, authorize URL with **no scope**
+  — app-level, code exchange via **`resp.json()`**, non-rotating refresh, `who_am_i`). Takes config
+  explicitly — deliberately NOT the upstream `process.env`/loopback-`http` helpers (wrong source of truth
+  in a multi-tenant Worker).
+- **`clio/connector.ts`** — env→config glue + `getUserClioToken` (the per-user "act as this user" seam M4 reuses).
+- **`auth/state.ts`** — Leg-2 CSRF: single-use random `state` in **D1** (not KV — the /authorize write and
+  /clio/callback read straddle KV's ~60s consistency window), `DELETE…RETURNING` one-time consume, expiry.
+- **`auth/clio-handler.ts`** — the Clio broker; replaces the M2 dummy `default-handler.ts` (deleted).
+- **`migrations/0001_clio_connections.sql`** — `users` + `clio_tokens` (ciphertext) + `pending_auth`.
+
+Changed (all merge-safe, worker-only):
+- **`env.ts`** — `ConnectorProps` widened to `{ userId, clioUserId, clioRegion }`. **No Clio token in props**
+  — the token stays in the encrypted store, resolved at tool-call time (confused-deputy boundary).
+- **`mcp/server.ts`** — added `clio_whoami` (resolves+refreshes the user's token, live `who_am_i`, returns
+  identity + token expiry). `buildMcpServer` now takes injected deps (`auth` + `whoami`).
+- **`mcp/api.ts`** — builds the per-request `whoami` closure from props + env.
+- **`worker.ts`** — `defaultHandler = clioHandler`. `userId = "clio-<clioUserId>"` (stable per user, no `:`,
+  which the provider's token format reserves).
+
+Security (reviewed — feature-dev reviewer, security-weighted; **no P0**):
+- **Per-user isolation** (PRD §7 top invariant): token lookup is strictly `WHERE user_id = props.userId`,
+  and `userId` is decrypted from the access-token props by the provider — uninfluenceable by the caller.
+- Tokens **AES-256-GCM at rest, ciphertext only**; never in props, logs, URLs, or error messages.
+- RFC 8707 `resource` still required at `/authorize` → every token audience-bound.
+- Leg-2 CSRF: 256-bit random single-use `state`; a forged/replayed callback → 400 and never reaches
+  `completeAuthorization` (which re-validates redirect_uri + PKCE). D1 queries fully parameterized; the
+  callback error page interpolates no client input.
+- **Review fixes applied:** `exchangeClioCode` throws if the code response omits `refresh_token` (don't
+  persist an un-refreshable token); the Clio `error` query param is sanitized before logging (log-injection).
+- **Known/deferred:** `redirect_uri` is request-host-derived (verified correct on the single workers.dev
+  host; Clio rejects any non-registered URI, so not a security hole — pin to a config value if a custom
+  domain/proxy is added, M6). Concurrent-refresh race is benign (Clio refresh tokens are non-rotating); a
+  conditional `UPDATE` lands with M4's hot read path.
+
+Setup + verified live (version `1f131744…`):
+- `ENCRYPTION_KEY` generated + set (`wrangler secret`); `CLIO_CLIENT_ID`/`SECRET` set to **PLACEHOLDERs**
+  pending a real Clio app. `.dev.vars` written (gitignored).
+- D1 migration applied (remote); `users`/`clio_tokens`/`pending_auth` present; `DELETE…RETURNING` (the
+  one-time state consume) confirmed working on D1.
+- `/health` (M3 note); `/mcp` no-token → 401; `/authorize` → 302 to `eu.app.clio.com/oauth/authorize`
+  with `redirect_uri=…/clio/callback` + random state; `pending_auth` row written; missing-`resource` → 400.
+- `npm run build` (stdio) + **116 tests** + `typecheck:worker` green. `/simplify` + security review applied.
+
+**PENDING (needs a real Clio private app):** the `/clio/callback` code exchange + `who_am_i` + token store +
+`clio_whoami`, and the two-user acceptance — blocked on `CLIO_CLIENT_ID`/`SECRET` for an app whose redirect
+URI is `https://clio-oauth-mcp.beatech.workers.dev/clio/callback`.
+
 ## 2026-06-11 — M2: Leg 1 OAuth (Claude ⇄ us) via `@cloudflare/workers-oauth-provider`
 
 Wrapped the Worker in `new OAuthProvider({...})` so it is an OAuth 2.1 Authorization Server +

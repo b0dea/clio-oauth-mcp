@@ -6,17 +6,22 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
 
 ---
 
-## Status — M2 deployed (Leg 1 OAuth live)
+## Status — M3 deployed (both OAuth legs live; awaiting real Clio app)
 
-- **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — the Worker is now an OAuth 2.1 AS + RS
-  (`@cloudflare/workers-oauth-provider`). `/mcp` requires a bearer token (no-token → 401 +
-  `WWW-Authenticate` resource-metadata pointer); DCR + PKCE-S256 + `/.well-known/*` metadata work
-  end-to-end. `/authorize` approves a **hardcoded dummy identity** (real Clio login is M3); an
-  authenticated `clio_ping` echoes the connected user. `/clio/callback` returns 501 until M3.
+- **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — full two-leg OAuth. Leg 1 (Claude ⇄ us) is the
+  `@cloudflare/workers-oauth-provider` AS + RS; Leg 2 (us ⇄ Clio) is the Clio broker: `/authorize`
+  redirects to Clio, `/clio/callback` exchanges the code, reads `who_am_i`, **AES-256-GCM-encrypts** the
+  per-user tokens into D1, and mints the Leg-1 token bound to the real Clio user. `clio_whoami` returns the
+  connected identity + token expiry; `clio_ping` echoes the user. `/mcp` is bearer-gated.
 - **Repo:** `b0dea/clio-oauth-mcp` (fork of `oktopeak/clio-mcp`; `upstream` remote set for merges).
-- **Provisioned** (CF `Alex@beatech.dev`, EU): D1 `clio-oauth-mcp` + KV `OAUTH_KV` + KV `CLIO_TOKENS`.
-- **Engineer, start here:** `src/remote/README.md` — milestone map. **M2 done** (Leg 1 OAuth); next is
-  **M3** (Leg 2 — Clio OAuth client + encrypted per-user token store).
+- **Provisioned** (CF `Alex@beatech.dev`, EU): D1 `clio-oauth-mcp` (schema applied: `users`, `clio_tokens`,
+  `pending_auth`) + KV `OAUTH_KV` + KV `CLIO_TOKENS`. Secrets set: `ENCRYPTION_KEY`; `CLIO_CLIENT_ID`/`SECRET`
+  are **placeholders** until a real Clio private app exists.
+- **Blocked on (operator):** register a **Clio private app** against the firm's Clio account with redirect URI
+  `https://clio-oauth-mcp.beatech.workers.dev/clio/callback`, then `wrangler secret put CLIO_CLIENT_ID` +
+  `CLIO_CLIENT_SECRET`. That unblocks the real `/clio/callback` + two-user acceptance.
+- **Engineer, start here:** `src/remote/README.md` — milestone map. **M3 done** (both legs); next is
+  **M4** (port the 26 Clio tools through the per-user AsyncLocalStorage adapter).
 - **Commands:** `npm install` · `npm run build` (stdio baseline) · `npm run typecheck:worker` · `npm run deploy`.
 - **Secrets** (not set yet): `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY` via `wrangler secret put`.
 - **Moving to a new org / CF account later:** `docs/migration.md`.

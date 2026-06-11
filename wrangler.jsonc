@@ -29,7 +29,8 @@
     {
       "binding": "DB",
       "database_name": "clio-oauth-mcp",
-      "database_id": "8ed13620-de9b-4cfd-8c41-b97633576612"
+      "database_id": "8ed13620-de9b-4cfd-8c41-b97633576612",
+      "migrations_dir": "migrations"
     }
   ]
 }

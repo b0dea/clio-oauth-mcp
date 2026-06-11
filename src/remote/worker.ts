@@ -15,15 +15,16 @@
  *   apiRoute ["/mcp"]  -> api (Hono)            — authenticated MCP turn, props injected
  *   defaultHandler     -> defaultHandler (Hono) — /authorize consent, /health, /clio/callback
  *
- * Clio is NOT involved yet: /authorize approves a hardcoded dummy identity. M3 swaps the
- * default handler for the Clio broker (Leg 2). Serving stack unchanged from M1: Hono +
- * @hono/mcp StreamableHTTPTransport, stateless JSON (docs/build-notes.md §2).
+ * Leg 2 (M3): the default handler is the Clio broker — /authorize redirects to Clio,
+ * /clio/callback exchanges the code and mints the Leg-1 token bound to the real Clio user.
+ * Serving stack unchanged from M1: Hono + @hono/mcp StreamableHTTPTransport, stateless JSON
+ * (docs/build-notes.md §2).
  */
 
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 
 import { api } from "./mcp/api.js";
-import { defaultHandler } from "./auth/default-handler.js";
+import { clioHandler } from "./auth/clio-handler.js";
 import type { Env } from "./env.js";
 
 export type { Env };
@@ -34,7 +35,7 @@ export default new OAuthProvider<Env>({
   // it passes here, and Hono surfaces it as c.executionCtx.props — so the plain bound-fetch
   // form delivers props; no WorkerEntrypoint needed (build-notes §10 spike #1, resolved).
   apiHandler: { fetch: api.fetch.bind(api) },
-  defaultHandler: { fetch: defaultHandler.fetch.bind(defaultHandler) },
+  defaultHandler: { fetch: clioHandler.fetch.bind(clioHandler) },
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/token",
   clientRegistrationEndpoint: "/register",

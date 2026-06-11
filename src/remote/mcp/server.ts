@@ -11,15 +11,32 @@ export const PING_PAYLOAD = {
 } as const;
 
 // The authenticated identity the api handler injects per request, decrypted from the
-// access-token grant props by workers-oauth-provider. M4 widens this with the per-user
-// Clio client; for now clio_ping just echoes the user id to prove the props seam works.
+// access-token grant props by workers-oauth-provider.
 export interface AuthContext {
   userId: string;
+  clioUserId?: string;
 }
 
-// Stateless: a fresh server is built per request (see worker.ts). The remote shell adds
-// no tools beyond clio_ping until M4 ports the upstream Clio tools through the adapter.
-export function buildMcpServer(auth?: AuthContext): McpServer {
+export interface WhoamiResult {
+  clioUserId: string;
+  name?: string;
+  email?: string;
+  tokenExpiresInMinutes: number;
+}
+
+/**
+ * Per-request capabilities the api handler injects. `whoami` resolves the current user's Clio
+ * token (refreshing if needed) and reads their live identity — keeping server.ts free of the
+ * storage/env wiring and trivially testable.
+ */
+export interface McpDeps {
+  auth: AuthContext;
+  whoami(): Promise<WhoamiResult>;
+}
+
+// Stateless: a fresh server is built per request (see mcp/api.ts). The remote shell adds
+// clio_ping (liveness) and clio_whoami (connected-identity) until M4 ports the upstream tools.
+export function buildMcpServer(deps?: McpDeps): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
   server.registerTool(
@@ -32,12 +49,38 @@ export function buildMcpServer(auth?: AuthContext): McpServer {
     },
     async () => ({
       content: [
-        {
-          type: "text",
-          text: JSON.stringify({ ...PING_PAYLOAD, authenticatedUser: auth?.userId ?? null }),
-        },
+        { type: "text", text: JSON.stringify({ ...PING_PAYLOAD, authenticatedUser: deps?.auth.userId ?? null }) },
       ],
     }),
+  );
+
+  server.registerTool(
+    "clio_whoami",
+    {
+      title: "Clio whoami",
+      description:
+        "Return the Clio user this connection is authenticated as, and how long the Clio access token remains valid. Reads only the caller's own Clio identity.",
+      annotations: { readOnlyHint: true, openWorldHint: true, idempotentHint: true },
+    },
+    async () => {
+      if (!deps) {
+        return { content: [{ type: "text", text: "Not connected to Clio." }], isError: true };
+      }
+      const me = await deps.whoami();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              clio_user_id: me.clioUserId,
+              name: me.name,
+              email: me.email,
+              token_expires_in_minutes: me.tokenExpiresInMinutes,
+            }),
+          },
+        ],
+      };
+    },
   );
 
   return server;

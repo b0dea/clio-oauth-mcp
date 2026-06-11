@@ -7,11 +7,13 @@ verified APIs, versions, and the upstream port map.
 
 ## Start here
 
-The Worker is wrapped in `new OAuthProvider({...})` — an OAuth 2.1 AS + RS for `/mcp` (DCR, PKCE-S256,
-`/authorize`, `/token`, `/.well-known/*`) — **M2, Leg 1 OAuth**, done. `/mcp` requires a bearer token;
-`/authorize` approves a **hardcoded dummy identity** (no Clio yet) and `clio_ping` echoes it. Next task
-is **M3**: Leg 2 — Clio OAuth client (`/authorize`→Clio, `/clio/callback`, code exchange, `who_am_i`)
-+ the encrypted per-user token store. `/clio/callback` is the only remaining 501 stub.
+Both OAuth legs are live — **M3 done**. Leg 1 (Claude ⇄ us) is `new OAuthProvider({...})` (DCR, PKCE-S256,
+`/authorize`, `/token`, `/.well-known/*`); Leg 2 (us ⇄ Clio) is the Clio broker (`auth/clio-handler.ts`):
+`/authorize` → Clio, `/clio/callback` exchanges the code, reads `who_am_i`, encrypts the per-user tokens
+into D1 (`storage/`), and mints the Leg-1 token bound to the real Clio user. `clio_whoami` proves it.
+Live verification stops at Clio's door until a real Clio app's `CLIO_CLIENT_ID`/`SECRET` are set (placeholders
+for now). Next task is **M4**: register the 26 upstream Clio tools through a per-user adapter that injects
+the user's Clio client via the upstream `AsyncLocalStorage` seam (reuse `getUserClioToken` from `clio/connector.ts`).
 
 ```bash
 npm install

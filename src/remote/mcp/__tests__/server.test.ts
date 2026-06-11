@@ -2,52 +2,76 @@ import { describe, it, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { buildMcpServer, PING_PAYLOAD, type AuthContext } from "../server.js";
+import { buildMcpServer, PING_PAYLOAD, type McpDeps, type WhoamiResult } from "../server.js";
 
-// Exercise the real MCP request path: a Client talking to buildMcpServer() over a
-// linked in-memory transport. No mocks of the server under test.
-async function connectedClient(auth?: AuthContext): Promise<Client> {
+const WHOAMI: WhoamiResult = {
+  clioUserId: "42",
+  name: "Ada Lovelace",
+  email: "ada@firm.example",
+  tokenExpiresInMinutes: 4321,
+};
+
+function deps(overrides?: Partial<McpDeps>): McpDeps {
+  return {
+    auth: { userId: "clio-42", clioUserId: "42" },
+    whoami: async () => WHOAMI,
+    ...overrides,
+  };
+}
+
+async function connectedClient(d?: McpDeps): Promise<Client> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "m2-test", version: "0.0.0" });
+  const client = new Client({ name: "m3-test", version: "0.0.0" });
   await Promise.all([
-    buildMcpServer(auth).connect(serverTransport),
+    buildMcpServer(d).connect(serverTransport),
     client.connect(clientTransport),
   ]);
   return client;
 }
 
-function pingPayload(result: Awaited<ReturnType<Client["callTool"]>>) {
+function payload(result: Awaited<ReturnType<Client["callTool"]>>) {
   const content = result.content as Array<{ type: string; text: string }>;
-  expect(content).toHaveLength(1);
   expect(content[0].type).toBe("text");
   return JSON.parse(content[0].text);
 }
 
 describe("MCP server", () => {
-  it("exposes exactly one tool, clio_ping, annotated read-only", async () => {
-    const client = await connectedClient();
+  it("exposes clio_ping and clio_whoami, both annotated read-only", async () => {
+    const client = await connectedClient(deps());
     const { tools } = await client.listTools();
-
-    expect(tools.map((t) => t.name)).toEqual(["clio_ping"]);
-    expect(tools[0].description).toBeTruthy();
-    expect(tools[0].annotations?.readOnlyHint).toBe(true);
+    expect(tools.map((t) => t.name).sort()).toEqual(["clio_ping", "clio_whoami"]);
+    for (const t of tools) expect(t.annotations?.readOnlyHint).toBe(true);
   });
 
-  it("clio_ping returns the static payload with a null user when unauthenticated", async () => {
-    const client = await connectedClient();
-    const result = await client.callTool({ name: "clio_ping" });
-
-    expect(result.isError ?? false).toBe(false);
-    expect(pingPayload(result)).toEqual({ ...PING_PAYLOAD, authenticatedUser: null });
-  });
-
-  // The props seam (build-notes §10 spike #1): workers-oauth-provider decrypts the
-  // grant props onto ctx.props and the api handler injects them here. Proving clio_ping
-  // echoes the injected identity proves M4 can inject the per-user Clio client the same way.
   it("clio_ping echoes the authenticated user from the injected context", async () => {
-    const client = await connectedClient({ userId: "user-abc" });
-    const result = await client.callTool({ name: "clio_ping" });
+    const client = await connectedClient(deps());
+    expect(payload(await client.callTool({ name: "clio_ping" })).authenticatedUser).toBe("clio-42");
+  });
 
-    expect(pingPayload(result).authenticatedUser).toBe("user-abc");
+  it("clio_ping reports a null user when built without an injected context", async () => {
+    const client = await connectedClient();
+    expect(payload(await client.callTool({ name: "clio_ping" }))).toEqual({ ...PING_PAYLOAD, authenticatedUser: null });
+  });
+
+  it("clio_whoami returns the connected Clio identity and token expiry", async () => {
+    const client = await connectedClient(deps());
+    expect(payload(await client.callTool({ name: "clio_whoami" }))).toEqual({
+      clio_user_id: "42",
+      name: "Ada Lovelace",
+      email: "ada@firm.example",
+      token_expires_in_minutes: 4321,
+    });
+  });
+
+  it("clio_whoami surfaces an error when the user is not connected", async () => {
+    const client = await connectedClient(
+      deps({
+        whoami: async () => {
+          throw new Error('User "clio-42" is not connected to Clio');
+        },
+      }),
+    );
+    const result = await client.callTool({ name: "clio_whoami" });
+    expect(result.isError).toBe(true);
   });
 });

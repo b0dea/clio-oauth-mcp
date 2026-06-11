@@ -30,6 +30,10 @@ export interface Env {
  * tools resolve the right user. M2 carries only the subject.
  */
 export interface ConnectorProps {
-  /** Our stable Leg-1 subject; equals the grant userId. Echoed by clio_ping. */
+  /** Our stable Leg-1 subject ("clio-<clioUserId>"); equals the grant userId. */
   userId: string;
+  /** Clio's who_am_i id for this user — set by the M3 Clio broker at /clio/callback. */
+  clioUserId: string;
+  /** Region the user's Clio token is bound to; routes their OAuth + API calls. */
+  clioRegion: string;
 }
