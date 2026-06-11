@@ -1,0 +1,35 @@
+{
+  // Cloudflare Worker config for the remote Clio MCP connector.
+  // Portability: account_id, name, routes, and the binding IDs below are the ONLY
+  // deploy-specific values. To move to a new Cloudflare account, recreate the D1 +
+  // KV resources there and swap the ids here — no source changes. See docs/migration.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clio-oauth-mcp",
+  "main": "src/remote/worker.ts",
+  "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "3699b6ddabe8729341468d6ebfe8a4ea",
+  "observability": { "enabled": true },
+
+  // Region drives every Clio base + OAuth URL. EU = eu.app.clio.com (UK firm).
+  "vars": {
+    "CLIO_REGION": "EU"
+  },
+
+  // Secrets are NOT here — set with `wrangler secret put`:
+  //   ENCRYPTION_KEY, CLIO_CLIENT_ID, CLIO_CLIENT_SECRET, COOKIE_ENCRYPTION_KEY
+  // Local dev: put the same keys in .dev.vars (gitignored).
+
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "198e446e34a24736a6cf60ae8427f5c6" },
+    { "binding": "CLIO_TOKENS", "id": "486614165e2e4ce08aebadfe70d952cf" }
+  ],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clio-oauth-mcp",
+      "database_id": "8ed13620-de9b-4cfd-8c41-b97633576612"
+    }
+  ]
+}
