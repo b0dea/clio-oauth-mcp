@@ -13,6 +13,8 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { buildMcpServer, type McpDeps } from "./server.js";
 import { getUserClioToken } from "../clio/connector.js";
 import { fetchClioIdentity } from "../clio/oauth.js";
+import { buildClioSessionContext } from "../adapter/sessionContext.js";
+import { sessionStorage } from "../../utils/sessionContext.js";
 import type { Env, ConnectorProps } from "../env.js";
 
 export const api = new Hono<{ Bindings: Env }>();
@@ -44,10 +46,20 @@ api.all("/mcp", async (c) => {
     },
   };
 
-  const server = buildMcpServer(deps);
-  const transport = new StreamableHTTPTransport({ enableJsonResponse: true });
-  await server.connect(transport);
-  return (await transport.handleRequest(c)) ?? c.text("MCP transport produced no response", 500);
+  // Run the whole MCP turn inside upstream's AsyncLocalStorage so every ported tool's
+  // resolveAccessToken() resolves THIS user's Clio token (clioClient.ts reads this context). The
+  // context is always populated, so the stdio disk/browser fallback never fires on the Worker.
+  // Only the token is injected, not the region: clioClient.ts getBase() routes off
+  // process.env.CLIO_REGION (the EU worker var), so all users hit eu.app.clio.com — correct for the
+  // single-region pilot. Per-user routing off the stored clioRegion is deferred (would need the
+  // do-not-edit clioClient to read the region from this context).
+  const ctx = buildClioSessionContext(userId, async () => (await getUserClioToken(env, userId)).accessToken);
+  return sessionStorage.run(ctx, async () => {
+    const server = buildMcpServer(deps);
+    const transport = new StreamableHTTPTransport({ enableJsonResponse: true });
+    await server.connect(transport);
+    return (await transport.handleRequest(c)) ?? c.text("MCP transport produced no response", 500);
+  });
 });
 
 api.onError((err, c) => {

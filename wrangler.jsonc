@@ -9,6 +9,18 @@
   "compatibility_date": "2026-05-01",
   "compatibility_flags": ["nodejs_compat"],
   "account_id": "3699b6ddabe8729341468d6ebfe8a4ea",
+
+  // Swap the upstream stdio-only modules (OS keychain via @napi-rs/keyring, fs, os.homedir at load)
+  // for Worker-safe shims (src/remote/upstream-shims) in the Worker bundle ONLY — the stdio build
+  // keeps the originals. esbuild matches the import specifier as written, so each distinct upstream
+  // import path needs its own key. `./tokenStorage.js` is the broad one: it targets src/auth/oauth.ts's
+  // sibling import (the only `./tokenStorage.js` reachable from the Worker today) — if a new
+  // tokenStorage.js sibling ever enters the Worker graph it would be aliased too, so keep it specific.
+  "alias": {
+    "../utils/auditLog.js": "./src/remote/upstream-shims/auditLog.ts",
+    "../auth/tokenStorage.js": "./src/remote/upstream-shims/tokenStorage.ts",
+    "./tokenStorage.js": "./src/remote/upstream-shims/tokenStorage.ts"
+  },
   "observability": { "enabled": true },
 
   // Region drives every Clio base + OAuth URL. EU = eu.app.clio.com (UK firm).

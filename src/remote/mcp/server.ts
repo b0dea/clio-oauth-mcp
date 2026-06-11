@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { version as SERVER_VERSION } from "../../../package.json";
+import { registerClioDataTools } from "../adapter/clioTools.js";
 
 const SERVER_NAME = "clio-mcp";
 
@@ -35,7 +36,9 @@ export interface McpDeps {
 }
 
 // Stateless: a fresh server is built per request (see mcp/api.ts). The remote shell adds
-// clio_ping (liveness) and clio_whoami (connected-identity) until M4 ports the upstream tools.
+// clio_ping (liveness) and clio_whoami (connected-identity); M4 adds the 22 clio_-prefixed Clio
+// data tools, which resolve the caller's token through the per-request SessionContext the api
+// handler installs.
 export function buildMcpServer(deps?: McpDeps): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
@@ -82,6 +85,8 @@ export function buildMcpServer(deps?: McpDeps): McpServer {
       };
     },
   );
+
+  registerClioDataTools(server);
 
   return server;
 }

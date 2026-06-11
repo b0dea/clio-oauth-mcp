@@ -25,8 +25,14 @@ export interface ClioTokenRepo {
     ciphertext: string;
     expiresAt: number;
   }): Promise<void>;
-  /** Refresh-time update of just the token row (identity columns are untouched). */
-  updateTokens(userId: string, ciphertext: string, expiresAt: number): Promise<void>;
+  /**
+   * Refresh-time update of just the token row (identity columns are untouched). Conditional on
+   * `prevExpiresAt`: the write only lands if the stored expiry still matches the one the caller
+   * read, so two requests that concurrently refresh the same near-expiry token don't double-write
+   * (the second is a no-op). Clio refresh tokens are non-rotating, so either refreshed token is
+   * valid — this just keeps the write a clean compare-and-set instead of a lost update.
+   */
+  updateTokens(userId: string, ciphertext: string, expiresAt: number, prevExpiresAt: number): Promise<void>;
 }
 
 export interface ClioConnectionIdentity {
@@ -73,7 +79,8 @@ export async function getValidClioToken(
   }
 
   const refreshed = await refresh(rec.clioRegion, tokens.refreshToken);
-  await repo.updateTokens(userId, await encrypt(encryptionKey, JSON.stringify(refreshed)), refreshed.expiresAt);
+  // `tokens.expiresAt` is the expiry we read and decided to refresh on — the compare-and-set key.
+  await repo.updateTokens(userId, await encrypt(encryptionKey, JSON.stringify(refreshed)), refreshed.expiresAt, tokens.expiresAt);
   return { accessToken: refreshed.accessToken, region: rec.clioRegion, expiresAt: refreshed.expiresAt };
 }
 
@@ -117,10 +124,12 @@ export function d1TokenRepo(db: D1Database): ClioTokenRepo {
           .bind(rec.userId, rec.ciphertext, rec.expiresAt, now),
       ]);
     },
-    async updateTokens(userId, ciphertext, expiresAt) {
+    async updateTokens(userId, ciphertext, expiresAt, prevExpiresAt) {
+      // Compare-and-set: only overwrite if the row still holds the expiry we refreshed from, so a
+      // concurrent refresh of the same token is a no-op rather than a lost update.
       await db
-        .prepare(`UPDATE clio_tokens SET ciphertext = ?, expires_at = ?, updated_at = ? WHERE user_id = ?`)
-        .bind(ciphertext, expiresAt, Date.now(), userId)
+        .prepare(`UPDATE clio_tokens SET ciphertext = ?, expires_at = ?, updated_at = ? WHERE user_id = ? AND expires_at = ?`)
+        .bind(ciphertext, expiresAt, Date.now(), userId, prevExpiresAt)
         .run();
     },
   };

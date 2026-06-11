@@ -1,24 +1,27 @@
 import { describe, it, expect, vi } from "vitest";
 import { getValidClioToken, saveClioConnection, type ClioTokenRepo } from "../tokenStore.js";
+import { encrypt } from "../crypto.js";
 import type { ClioTokenSet } from "../../clio/oauth.js";
 
 const KEY = "weUyM4TL8z6AwAOQkAnA7y2kh9lTiZmdDhxUvFJ8Td0=";
 
 // In-memory ClioTokenRepo — the legitimate storage boundary. The D1 SQL adapter is a thin
 // implementation verified live; here we exercise the refresh/decrypt orchestration for real.
-function memoryRepo(): ClioTokenRepo & { raw: Map<string, { ciphertext: string; clioRegion: string }> } {
-  const raw = new Map<string, { ciphertext: string; clioRegion: string }>();
+function memoryRepo(): ClioTokenRepo & { raw: Map<string, { ciphertext: string; clioRegion: string; expiresAt: number }> } {
+  const raw = new Map<string, { ciphertext: string; clioRegion: string; expiresAt: number }>();
   return {
     raw,
     async getConnection(userId: string) {
-      return raw.get(userId) ?? null;
+      const r = raw.get(userId);
+      return r ? { ciphertext: r.ciphertext, clioRegion: r.clioRegion } : null;
     },
     async saveConnection(rec) {
-      raw.set(rec.userId, { ciphertext: rec.ciphertext, clioRegion: rec.clioRegion });
+      raw.set(rec.userId, { ciphertext: rec.ciphertext, clioRegion: rec.clioRegion, expiresAt: rec.expiresAt });
     },
-    async updateTokens(userId: string, ciphertext: string) {
+    async updateTokens(userId: string, ciphertext: string, expiresAt: number, prevExpiresAt: number) {
+      // Faithful to d1TokenRepo's `WHERE expires_at = prevExpiresAt`: only update on a match.
       const cur = raw.get(userId);
-      if (cur) raw.set(userId, { ...cur, ciphertext });
+      if (cur && cur.expiresAt === prevExpiresAt) raw.set(userId, { ...cur, ciphertext, expiresAt });
     },
   };
 }
@@ -67,6 +70,47 @@ describe("getValidClioToken", () => {
   it("throws a clear error when the user has no connection", async () => {
     const repo = memoryRepo();
     await expect(getValidClioToken(repo, KEY, vi.fn(), "nobody")).rejects.toThrow(/not connected/i);
+  });
+
+  it("hands updateTokens the prior expiry so the refresh write is a compare-and-set", async () => {
+    // Two concurrent requests can both read a near-expiry token and both refresh. The write must
+    // be conditional on the expiry it read (WHERE expires_at = <prev>) so the second is a no-op
+    // rather than clobbering the first refresh.
+    const repo = memoryRepo();
+    const oldExpiry = past();
+    const newExpiry = future();
+    await saveClioConnection(repo, KEY, { userId: "u-a", clioUserId: "1", clioRegion: "EU" }, {
+      accessToken: "acc-OLD",
+      refreshToken: "ref-a",
+      expiresAt: oldExpiry,
+    });
+    const updateSpy = vi.spyOn(repo, "updateTokens");
+
+    await getValidClioToken(repo, KEY, async () => ({ accessToken: "acc-NEW", refreshToken: "ref-a", expiresAt: newExpiry }), "u-a");
+
+    expect(updateSpy).toHaveBeenCalledWith("u-a", expect.any(String), newExpiry, oldExpiry);
+  });
+
+  it("compare-and-set updateTokens: a write whose expected prior expiry no longer matches is a no-op", async () => {
+    // Exercises the storage-boundary contract the D1 `UPDATE … WHERE expires_at = ?` enforces: the
+    // first refresher (prev matches) commits; a concurrent refresher that read the same old expiry
+    // (prev now stale) must not overwrite it.
+    const T0 = past(); // the expiry both refreshers read (the compare-and-set key)
+    const winnerExpiry = future();
+    const loserExpiry = future() + 5000;
+    const repo = memoryRepo();
+    await saveClioConnection(repo, KEY, { userId: "u", clioUserId: "1", clioRegion: "EU" }, {
+      accessToken: "acc", refreshToken: "ref", expiresAt: T0,
+    });
+
+    const ctWinner = await encrypt(KEY, JSON.stringify({ accessToken: "WIN", refreshToken: "ref", expiresAt: winnerExpiry }));
+    const ctLoser = await encrypt(KEY, JSON.stringify({ accessToken: "LOSE", refreshToken: "ref", expiresAt: loserExpiry }));
+    await repo.updateTokens("u", ctWinner, winnerExpiry, T0); // prev matches → commits
+    await repo.updateTokens("u", ctLoser, loserExpiry, T0); // prev now stale (row is winnerExpiry) → no-op
+
+    const got = await getValidClioToken(repo, KEY, vi.fn(), "u");
+    expect(got.accessToken).toBe("WIN");
+    expect(got.expiresAt).toBe(winnerExpiry);
   });
 
   it("isolates users: A's token is never returned for B (top invariant)", async () => {

@@ -10,6 +10,7 @@
 import type { Env } from "../env.js";
 import { type ClioOAuthConfig, refreshClioTokens } from "./oauth.js";
 import { d1TokenRepo, getValidClioToken } from "../storage/tokenStore.js";
+import { kvCachedTokenRepo } from "../storage/kvTokenRepo.js";
 
 /** Build the Clio OAuth config from env, failing loudly if the connector secrets are unset. */
 export function clioConfigFromEnv(env: Env): ClioOAuthConfig {
@@ -32,8 +33,11 @@ export function requireEncryptionKey(env: Env): string {
  */
 export function getUserClioToken(env: Env, userId: string): Promise<{ accessToken: string; region: string; expiresAt: number }> {
   const cfg = clioConfigFromEnv(env);
+  // M4 hot path: every tool call resolves the token, so cache the D1 read in KV (cache only — D1
+  // stays authoritative; the cache holds ciphertext, and writes invalidate it). See kvTokenRepo.ts.
+  const repo = kvCachedTokenRepo(env.CLIO_TOKENS, d1TokenRepo(env.DB));
   return getValidClioToken(
-    d1TokenRepo(env.DB),
+    repo,
     requireEncryptionKey(env),
     (region, refreshToken) => refreshClioTokens({ ...cfg, region }, refreshToken),
     userId,

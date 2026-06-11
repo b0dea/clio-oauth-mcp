@@ -6,22 +6,26 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
 
 ---
 
-## Status — M3 deployed (both OAuth legs live; awaiting real Clio app)
+## Status — M4 deployed (21 Clio tools ported, multi-tenant; awaiting real Clio app)
 
-- **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — full two-leg OAuth. Leg 1 (Claude ⇄ us) is the
-  `@cloudflare/workers-oauth-provider` AS + RS; Leg 2 (us ⇄ Clio) is the Clio broker: `/authorize`
-  redirects to Clio, `/clio/callback` exchanges the code, reads `who_am_i`, **AES-256-GCM-encrypts** the
-  per-user tokens into D1, and mints the Leg-1 token bound to the real Clio user. `clio_whoami` returns the
-  connected identity + token expiry; `clio_ping` echoes the user. `/mcp` is bearer-gated.
+- **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — full two-leg OAuth + the ported tools. Leg 1
+  (Claude ⇄ us) is the `@cloudflare/workers-oauth-provider` AS + RS; Leg 2 (us ⇄ Clio) is the Clio broker:
+  `/authorize` redirects to Clio, `/clio/callback` exchanges the code, reads `who_am_i`,
+  **AES-256-GCM-encrypts** the per-user tokens into D1, and mints the Leg-1 token bound to the real Clio
+  user. **M4:** `/mcp` now serves 23 tools — `clio_ping`, `clio_whoami`, and 21 `clio_`-prefixed Clio data
+  tools, each acting as the authenticated caller's own Clio account via the upstream AsyncLocalStorage seam
+  (the 22nd, `upload_document`, is stdio-only — it reads a local file path a Worker can't reach). `/mcp` is
+  bearer-gated.
 - **Repo:** `b0dea/clio-oauth-mcp` (fork of `oktopeak/clio-mcp`; `upstream` remote set for merges).
 - **Provisioned** (CF `Alex@beatech.dev`, EU): D1 `clio-oauth-mcp` (schema applied: `users`, `clio_tokens`,
   `pending_auth`) + KV `OAUTH_KV` + KV `CLIO_TOKENS`. Secrets set: `ENCRYPTION_KEY`; `CLIO_CLIENT_ID`/`SECRET`
   are **placeholders** until a real Clio private app exists.
 - **Blocked on (operator):** register a **Clio private app** against the firm's Clio account with redirect URI
   `https://clio-oauth-mcp.beatech.workers.dev/clio/callback`, then `wrangler secret put CLIO_CLIENT_ID` +
-  `CLIO_CLIENT_SECRET`. That unblocks the real `/clio/callback` + two-user acceptance.
-- **Engineer, start here:** `src/remote/README.md` — milestone map. **M3 done** (both legs); next is
-  **M4** (port the 26 Clio tools through the per-user AsyncLocalStorage adapter).
+  `CLIO_CLIENT_SECRET`. That unblocks live per-user tool calls + two-user acceptance (a Leg-1 token can't be
+  minted until Leg-2 completes, so authenticated `/mcp` calls stay gated until then).
+- **Engineer, start here:** `src/remote/README.md` — milestone map. **M4 done** (tools ported, multi-tenant);
+  next is **M5** (centralized append-only D1 audit log — `auditLog.appendAuditLog` is a no-op shim until then).
 - **Commands:** `npm install` · `npm run build` (stdio baseline) · `npm run typecheck:worker` · `npm run deploy`.
 - **Secrets** (not set yet): `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY` via `wrangler secret put`.
 - **Moving to a new org / CF account later:** `docs/migration.md`.

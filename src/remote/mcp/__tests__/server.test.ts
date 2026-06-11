@@ -36,11 +36,21 @@ function payload(result: Awaited<ReturnType<Client["callTool"]>>) {
 }
 
 describe("MCP server", () => {
-  it("exposes clio_ping and clio_whoami, both annotated read-only", async () => {
+  it("exposes clio_ping, clio_whoami, and the 21 clio_-prefixed Clio data tools", async () => {
     const client = await connectedClient(deps());
-    const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["clio_ping", "clio_whoami"]);
-    for (const t of tools) expect(t.annotations?.readOnlyHint).toBe(true);
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).toHaveLength(23); // ping + whoami + 21 (upload_document is remote-incompatible)
+    expect(names.every((n) => n.startsWith("clio_"))).toBe(true);
+    expect(names).toEqual(expect.arrayContaining(["clio_ping", "clio_whoami", "clio_list_matters", "clio_create_matter"]));
+    expect(names).not.toContain("clio_upload_document");
+  });
+
+  it("annotates ping/whoami read-only and write tools as writes", async () => {
+    const client = await connectedClient(deps());
+    const ann = Object.fromEntries((await client.listTools()).tools.map((t) => [t.name, t.annotations]));
+    expect(ann["clio_ping"]?.readOnlyHint).toBe(true);
+    expect(ann["clio_whoami"]?.readOnlyHint).toBe(true);
+    expect(ann["clio_create_matter"]?.readOnlyHint).toBe(false);
   });
 
   it("clio_ping echoes the authenticated user from the injected context", async () => {

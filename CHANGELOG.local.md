@@ -8,6 +8,79 @@ or adds a new module (merge-safe).
 
 ---
 
+## 2026-06-11 — M4: port the Clio tools (multi-tenant)
+
+The 21 upstream Clio data tools now run per-user on the Worker, `clio_`-prefixed and annotated, each
+acting as the authenticated caller's own Clio account. **No upstream `src/tools/**`, `src/utils/**`,
+or `src/auth/**` file is edited** — all new code is under `src/remote/`, plus a wrangler `alias` map.
+
+New modules (merge-safe):
+- **`adapter/clioTools.ts`** — registration adapter. A Proxy over `McpServer.registerTool` prepends
+  `clio_` and merges MCP annotations (PRD §M4: reads `readOnlyHint`/`openWorldHint`; the 8 writes
+  `readOnlyHint:false`; `create_*` non-destructive, `update_task`/`complete_task` destructive).
+  `registerClioDataTools` runs the 9 upstream `register*Tools` through it. `authenticate`/`logout`/
+  `auth_status` (→ `clio_whoami`) and `export_audit_log` (→ M5 D1 export) are not ported.
+- **`adapter/sessionContext.ts`** — the minimal upstream `SessionContext` the /mcp turn runs inside.
+  Only `getAccessToken()` is real (resolves the user's token, memoized once per request; a failure is
+  not memoized); the dropped-auth-tool members throw loudly (no ported data tool calls them).
+- **`storage/kvTokenRepo.ts`** — KV read-cache decorator over `d1TokenRepo` for the hot per-tool-call
+  read path (deferred from M3). Caches ciphertext+region only (never plaintext), keyed per-userId;
+  writes invalidate; D1 stays authoritative.
+- **`upstream-shims/{tokenStorage,auditLog}.ts`** — Worker-safe replacements for the Node-hostile
+  upstream modules, swapped in **for the Worker build only** via wrangler `alias`. `tokenStorage`
+  (OS keychain `@napi-rs/keyring` + `fs` + `os.homedir()` at load — none bundle/run on Workers) is
+  unreachable here (the SessionContext is always populated) so it throws; `auditLog.appendAuditLog`
+  is a no-op until M5's D1 sink. This is what lets the upstream tools bundle without a native addon.
+
+Changed (merge-safe, worker-only):
+- **`storage/tokenStore.ts`** — `updateTokens` is now a compare-and-set (`UPDATE … WHERE expires_at =
+  <prev>`); `getValidClioToken` threads the pre-refresh expiry. A concurrent refresh of the same
+  near-expiry token is a no-op instead of a lost write (deferred from M3; benign anyway — Clio refresh
+  tokens are non-rotating).
+- **`clio/connector.ts`** — `getUserClioToken` now resolves through the KV cache.
+- **`mcp/server.ts`** — `buildMcpServer` also registers the 21 data tools (→ 23 tools incl. ping/whoami).
+- **`mcp/api.ts`** — runs the whole MCP turn inside `sessionStorage.run(ctx)`, so every ported tool's
+  `resolveAccessToken()` resolves THIS user's token via the AsyncLocalStorage seam — per-user injection,
+  zero tool edits.
+- **`wrangler.jsonc`** — `alias` map (the three upstream→shim entries).
+
+Gotchas resolved (investigated, not assumed):
+- **Bundling.** Importing the upstream tools pulls `clioClient → oauth → tokenStorage → @napi-rs/keyring`
+  (a native addon esbuild can't bundle) + `fs`/`os.homedir()` at module load. Solved by aliasing the two
+  Node-hostile modules to shims — verified the worker bundles, boots (59–64 ms), and the bundle is free of
+  keyring/`appendFile`/`homedir`. `typecheck:worker` stays green (the upstream chain type-checks via the
+  already-installed `@types/node`; no tsconfig change).
+- **Region routing.** `clioClient.getBase()` reads `process.env.CLIO_REGION`, which `nodejs_compat`
+  auto-populates from the `CLIO_REGION="EU"` var (compat date ≥ 2025-04-01), so all users route to
+  `eu.app.clio.com` — correct for the single-region pilot. Only the token (not region) is injected;
+  per-user region routing is **deferred** (would need the do-not-edit `clioClient` to read region from the
+  context). Documented at the injection seam.
+- **`fields` nesting depth (build-notes §10 spike #2 — resolved).** Clio supports one-level nested-association
+  selection; **two-level returns 400**. All ported tools use only one level (`client{id,name}` etc.) — no
+  two-level nesting anywhere — so no structural risk.
+
+Review fixes applied (feature-dev reviewer, security-weighted; `/simplify` first):
+- **`upload_document` is not registered** — it reads a local file by absolute path (`fs.stat`), which a
+  Worker can't reach, so it would only ever error. Dropped from the remote surface (21 data tools, not 22);
+  its read tools (`list_documents`/`get_document`) are network-only and stay. The only tool not ported.
+- **Rejected token promise no longer poisons the turn** — a transient resolve failure clears the memo so
+  the next tool call retries.
+- `/simplify`: annotation table is a plain literal; auditLog shim reuses the upstream `AuditEntry` type;
+  alias keys documented (the generic `./tokenStorage.js` key flagged).
+- Confirmed sound: cross-user ALS isolation (fresh server/transport/ctx per request, turn wrapped in
+  `sessionStorage.run`, memo closure-local per user), KV key strictly per-userId + ciphertext-only, the
+  compare-and-set threading, annotation correctness, no token/PII in logs.
+
+Verified: `npm run build` (stdio) + `typecheck:worker` + **138 tests** green; `wrangler deploy --dry-run`
++ `deploy` (live, boots in 64 ms); `/mcp` no-token → 401; both OAuth metadata endpoints → 200; the
+23-tool surface + annotations asserted locally via the in-memory MCP client.
+
+**PENDING (needs a real Clio private app — same gate as M3):** live per-user read-tool calls returning
+real Clio data, and the M6 cross-user isolation test. Blocked on `CLIO_CLIENT_ID`/`SECRET` (a Leg-1 token
+can't be minted without completing Leg-2), so authenticated `/mcp` calls can't run live yet.
+
+---
+
 ## 2026-06-11 — M3: Leg 2 OAuth (us ⇄ Clio) + per-user encrypted token store
 
 Each user now connects their own Clio account: `/authorize` redirects to Clio, `/clio/callback`

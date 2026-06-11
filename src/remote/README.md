@@ -7,13 +7,16 @@ verified APIs, versions, and the upstream port map.
 
 ## Start here
 
-Both OAuth legs are live — **M3 done**. Leg 1 (Claude ⇄ us) is `new OAuthProvider({...})` (DCR, PKCE-S256,
-`/authorize`, `/token`, `/.well-known/*`); Leg 2 (us ⇄ Clio) is the Clio broker (`auth/clio-handler.ts`):
-`/authorize` → Clio, `/clio/callback` exchanges the code, reads `who_am_i`, encrypts the per-user tokens
-into D1 (`storage/`), and mints the Leg-1 token bound to the real Clio user. `clio_whoami` proves it.
-Live verification stops at Clio's door until a real Clio app's `CLIO_CLIENT_ID`/`SECRET` are set (placeholders
-for now). Next task is **M4**: register the 26 upstream Clio tools through a per-user adapter that injects
-the user's Clio client via the upstream `AsyncLocalStorage` seam (reuse `getUserClioToken` from `clio/connector.ts`).
+Both OAuth legs are live and the Clio tools are ported, multi-tenant — **M4 done**. Leg 1 (Claude ⇄ us) is
+`new OAuthProvider({...})` (DCR, PKCE-S256, `/authorize`, `/token`, `/.well-known/*`); Leg 2 (us ⇄ Clio) is
+the Clio broker (`auth/clio-handler.ts`): `/authorize` → Clio, `/clio/callback` exchanges the code, reads
+`who_am_i`, encrypts the per-user tokens into D1 (`storage/`), and mints the Leg-1 token bound to the real
+Clio user. **M4:** `adapter/clioTools.ts` registers 21 upstream Clio tools `clio_`-prefixed + annotated, and
+`mcp/api.ts` runs each MCP turn inside `sessionStorage.run(ctx)` so every tool resolves THIS user's token via
+the upstream `AsyncLocalStorage` seam (`adapter/sessionContext.ts` + `getUserClioToken`). Node-hostile upstream
+deps (keyring/fs) are swapped for `upstream-shims/` via the wrangler `alias` map. Live tool calls stop at
+Clio's door until a real Clio app's `CLIO_CLIENT_ID`/`SECRET` are set (placeholders for now). Next task is
+**M5**: the centralized append-only D1 audit log (`upstream-shims/auditLog.ts` is a no-op until then).
 
 ```bash
 npm install

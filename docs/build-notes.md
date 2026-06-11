@@ -273,5 +273,20 @@ MCP-serving stack is **Hono + `@hono/mcp`** (no `agents`); these install zod-3-c
    and default handlers, plus `try/catch` around the `parseAuthRequest` / `completeAuthorization` paths
    (bad-client requests → 400, non-revealing). This is the deferred-from-M1 error path (PRD §7).
 
+**Resolved at M4 (2026-06-11):**
+1. **Bundling the upstream tools onto the Worker.** Importing them pulls `clioClient → oauth →
+   tokenStorage → @napi-rs/keyring` (a native addon esbuild can't bundle) plus `fs`/`os.homedir()` at
+   module load. Fixed with a wrangler `alias` map that swaps `tokenStorage`/`auditLog` for Worker-safe
+   shims (`src/remote/upstream-shims/`) in the Worker build only — verified the bundle is keyring/fs-free
+   and the Worker boots (64 ms). `typecheck:worker` needs no change (the upstream chain type-checks via
+   the installed `@types/node`).
+2. **`fields` nesting depth.** Confirmed against Clio's docs: one-level nested-association selection is
+   supported; **two-level returns 400 Bad Request** (second-level resources return only default fields).
+   All 21 ported tools use only one level (`client{id,name}`, `matter{id,display_number}`, etc.) — no
+   two-level nesting — so no structural risk; nothing to change (tool files are do-not-edit).
+
 **Still to settle at build time:**
-2. Confirm the exact `fields` nesting depth (one vs two levels) against the live Clio `fields` doc (M4).
+- Per-user region routing: `clioClient.getBase()` reads `process.env.CLIO_REGION` (the EU worker var), so
+  all users route to `eu.app.clio.com` — correct for the single-region pilot, but the stored per-user
+  `clio_region` is not honored on the read path. Routing per user would need the do-not-edit `clioClient`
+  to read region from the SessionContext (deferred; only matters when a non-EU firm is added).
