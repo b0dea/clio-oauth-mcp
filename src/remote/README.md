@@ -17,11 +17,14 @@ the upstream `AsyncLocalStorage` seam (`adapter/sessionContext.ts` + `getUserCli
 deps (keyring/fs) are swapped for `upstream-shims/` via the wrangler `alias` map. Live tool calls stop at
 Clio's door until a real Clio app's `CLIO_CLIENT_ID`/`SECRET` are set (placeholders for now).
 
-**Audit/connection logging is intentionally NOT hosted** for the pilot (operator decision). M5 (a D1
-`audit_log`) was built and then removed; `upstream-shims/auditLog.ts` is a no-op and the Worker persists no
-tool-call or request log (`observability:false`; `wrangler tail` still works for live debugging). The D1 here
-holds only the per-user OAuth token store — see CHANGELOG `2026-06-11 — M5 … added, then removed`. Next task
-is **M6**: hardening + the automated cross-user isolation test + two-user acceptance.
+**Audit logging (M5) is present but OFF by default** (operator decision — no hosted logs for the pilot).
+The sink (`storage/auditStore.ts` + the `upstream-shims/auditLog.ts` forwarder) only runs when
+`AUDIT_LOG_ENABLED="true"`; otherwise `mcp/api.ts` attaches no writer and the shim no-ops. The `audit_log`
+table is **not deployed** (migrations `0002`/`0003` exist but aren't applied; `wrangler deploy` doesn't apply
+migrations), and `observability:false` means no Workers request logs are stored either (`wrangler tail` still
+works). The D1 holds only the per-user OAuth token store. To enable audit: apply the migrations + set the var
+— see `docs/operations.md`. Next task is **M6**: hardening + the automated cross-user isolation test +
+two-user acceptance.
 
 ```bash
 npm install
@@ -51,7 +54,7 @@ wrangler secret put COOKIE_ENCRYPTION_KEY   # signs the consent cookie
 | M3 | Leg 2 — Clio OAuth client (`/authorize`→Clio, `/clio/callback`, code exchange, `who_am_i`) | `auth/clio-handler.ts` |
 | M3 | Per-user encrypted token store (AES-256-GCM via SubtleCrypto; D1 primary, KV cache) | `storage/` |
 | M4 | Registration adapter — prefix tools `clio_`, inject the per-user Clio client via the upstream `AsyncLocalStorage` seam | `adapter/` |
-| M5 | Centralized audit log → built then removed (pilot hosts no logs). If re-added: a D1 sink + migration + a few lines of `mcp/api.ts` | — (none) |
+| M5 | Centralized audit log → D1 `audit_log` (append-only); **off by default** behind `AUDIT_LOG_ENABLED`, table not deployed until enabled | `storage/auditStore.ts` + `upstream-shims/auditLog.ts` |
 
 ## The injection seam (no tool edits)
 

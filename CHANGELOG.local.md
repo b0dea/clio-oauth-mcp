@@ -8,31 +8,44 @@ or adds a new module (merge-safe).
 
 ---
 
-## 2026-06-11 — M5 audit logging: added, then removed (no hosted logs for the pilot)
+## 2026-06-11 — M5 audit logging: kept but OFF by default (no DB deployed) + token-storage security pass
 
-M5 (centralized append-only D1 `audit_log`) was built, reviewed, and deployed earlier today, then
-**fully reverted** the same day on the operator's decision: **the pilot will not host any audit log or
-connection log** in Cloudflare (or anywhere) for now — we just need the MCP↔Clio OAuth connection.
-Net delta vs upstream from M5 is therefore **zero**; this entry records the round-trip so the history
-is honest.
+The M5 audit code (centralized append-only D1 `audit_log`) is **retained but disabled by default** behind
+an `AUDIT_LOG_ENABLED` env var. The pilot deploys **no audit table** and persists **no** tool-call or
+connection log unless an operator explicitly opts in. (This supersedes the earlier same-day removal —
+commits `aa46fe4` added M5, `9a1798c` removed it, then it was restored gated on the operator's clarified
+ask: keep the work, just gate it, and ensure no DB is deployed for it.)
 
-Removed (was M5, now gone):
-- `src/remote/storage/auditStore.ts` (+ its test) and `src/remote/upstream-shims/__tests__/auditLog.test.ts`.
-- `migrations/0002_audit_log.sql` + `migrations/0003_audit_log_append_only.sql`. The `audit_log` table
-  and its append-only triggers were **dropped from the remote D1**, and the `0002`/`0003` rows removed
-  from `d1_migrations` — remote is back to `0001` only.
-- The wiring in `mcp/api.ts`, `adapter/sessionContext.ts`, `env.ts`, and `upstream-shims/auditLog.ts`
-  was reverted to the M4 state. The shim is again a **no-op** (it must still exist — the 21 tools import
-  it via the wrangler `alias`, and it keeps the fs-backed upstream module out of the Worker bundle).
+Default-off, by design:
+- **`env.ts`** — new `AUDIT_LOG_ENABLED?: string` var. **`mcp/api.ts`** only builds + attaches the audit
+  writer when it is exactly `"true"`; otherwise no writer is attached and `upstream-shims/auditLog.ts`
+  no-ops (its existing non-fatal early-return). So with audit off, the code never touches D1.
+- **Migrations `0002`/`0003` live in the repo but are NOT applied** — the `audit_log` table + its
+  append-only triggers do **not** exist on the remote D1 (only `users`/`clio_tokens`/`pending_auth`).
+  `wrangler deploy` does not apply migrations, so deploying never creates the table.
+- **`observability: false`** in `wrangler.jsonc` — no Workers request/connection logs persisted in
+  Cloudflare either; `wrangler tail` still streams live for debugging.
 
-Kept (these are the OAuth connection, not logs):
-- The D1 token store (`users`, `clio_tokens`, `pending_auth`) and both KV namespaces. Per-user Clio
-  tokens must persist (encrypted) so the connection can refresh them — deleting them would break Leg 2.
-- **`observability` set to `false`** in `wrangler.jsonc`: the pilot persists no Workers request/connection
-  logs in Cloudflare. Live debugging still works via `wrangler tail` (real-time, independent of this).
+To enable audit later: `wrangler d1 migrations apply clio-oauth-mcp --remote` (creates `audit_log` +
+the append-only triggers), then set `AUDIT_LOG_ENABLED="true"`. The sink itself (redaction, per-user
+attribution, durable+best-effort write, append-only DB triggers) is the reviewed M5 implementation —
+see `docs/operations.md` for the schema, the export query, and the enable steps.
 
-If audit logging is wanted later, it's a clean re-add (a sink module + a migration + a few lines of
-api.ts wiring); design notes are in this CHANGELOG's git history (commit `aa46fe4`).
+Token-storage security pass (operator asked to confirm storing tokens is safe — feature-dev reviewer,
+**no P0**; all six properties **sound**): AES-256-GCM with a fresh 12-byte IV per record + auth-tag
+enforced (tampering fails closed); strict `WHERE user_id = ?` isolation on every read/write, `userId`
+sourced from the uninfluenceable access-token props; KV cache holds ciphertext only, keyed per-user,
+invalidated on write; `ENCRYPTION_KEY` length-validated at import, no key material in code/logs; Leg-2
+CSRF state single-use (`DELETE … RETURNING`) + expiry; code exchange requires `refresh_token`.
+- **Applied (P2, defense-in-depth):** `auth/clio-handler.ts` `console.error` sites now log
+  `err.message`, not the raw error object, so a future exception carrying response detail can't leak.
+- **Deferred to M6 (P1, not currently exploitable):** `callbackRedirectUri` derives the redirect URI
+  from the request host; Cloudflare sets the Host and Clio rejects any non-registered URI, so it's safe
+  on the single workers.dev host — pin it to a `WORKER_BASE_URL` config value when a custom domain is added.
+
+Verified: `npm run build` (stdio) + `typecheck:worker` + **154 tests** green (the M5 sink tests are back);
+`wrangler deploy` live; remote D1 has only the token tables (no `audit_log`); no-token `/mcp` → 401,
+AS metadata → 200.
 
 ---
 

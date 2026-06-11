@@ -16,9 +16,11 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
   tools, each acting as the authenticated caller's own Clio account via the upstream AsyncLocalStorage seam
   (the 22nd, `upload_document`, is stdio-only — it reads a local file path a Worker can't reach). `/mcp` is
   bearer-gated.
-- **No hosted logs (operator decision):** the pilot persists no audit/connection log. M5 (a D1 `audit_log`)
-  was built then removed; `observability` is `false` (no Workers request logs; `wrangler tail` still works).
-  The D1 holds only the per-user OAuth token store.
+- **No hosted logs by default (operator decision):** audit logging (M5, a D1 `audit_log`) is present but
+  **off** behind `AUDIT_LOG_ENABLED` — no writer runs and the `audit_log` table isn't deployed unless
+  enabled. `observability` is `false` (no Workers request logs; `wrangler tail` still works). The D1 holds
+  only the per-user OAuth token store. A token-storage security pass found **no P0** (all properties sound).
+  To enable audit: apply migrations + set the var — see `docs/operations.md`.
 - **Repo:** `b0dea/clio-oauth-mcp` (fork of `oktopeak/clio-mcp`; `upstream` remote set for merges).
 - **Provisioned** (CF `Alex@beatech.dev`, EU): D1 `clio-oauth-mcp` (schema applied: `users`, `clio_tokens`,
   `pending_auth`) + KV `OAUTH_KV` + KV `CLIO_TOKENS`. Secrets set: `ENCRYPTION_KEY`;
@@ -28,8 +30,8 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
   `CLIO_CLIENT_SECRET`. That unblocks live per-user tool calls + two-user acceptance (a Leg-1 token can't be
   minted until Leg-2 completes, so authenticated `/mcp` calls stay gated until then).
 - **Engineer, start here:** `src/remote/README.md` — milestone map. **M4 done** (tools ported, multi-tenant;
-  audit logging intentionally not hosted); next is **M6** (hardening + automated cross-user isolation test +
-  two-user acceptance).
+  M5 audit code present but off by default, no table deployed); next is **M6** (hardening + automated
+  cross-user isolation test + two-user acceptance).
 - **Commands:** `npm install` · `npm run build` (stdio baseline) · `npm run typecheck:worker` · `npm run deploy`.
 - **Secrets** (not set yet): `ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY` via `wrangler secret put`.
 - **Moving to a new org / CF account later:** `docs/migration.md`.

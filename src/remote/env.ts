@@ -11,6 +11,10 @@ export interface Env {
   DB: D1Database; // per-user OAuth token store: users + clio_tokens + pending_auth — M3
   // Vars
   CLIO_REGION: string; // EU for the pilot — drives all Clio base + OAuth URLs (M3)
+  // Audit logging is OFF unless this is exactly "true". The pilot hosts no tool-call/connection log
+  // and deploys no audit_log table by default. To enable: set this var AND apply migrations 0002/0003
+  // (which create the append-only audit_log table). Unset = off. — M5
+  AUDIT_LOG_ENABLED?: string;
   // Secrets (set via `wrangler secret put`). Optional so the Worker type-checks before
   // the M3 Clio broker needs them.
   ENCRYPTION_KEY?: string;

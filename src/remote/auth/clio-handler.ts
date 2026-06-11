@@ -39,7 +39,7 @@ clioHandler.get("/authorize", async (c) => {
   try {
     authReq = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
   } catch (err) {
-    console.error("invalid /authorize request:", err);
+    console.error("invalid /authorize request:", err instanceof Error ? err.message : String(err));
     return c.json({ error: "invalid_request", error_description: "Invalid authorization request" }, 400);
   }
   if (!authReq.resource) {
@@ -53,7 +53,7 @@ clioHandler.get("/authorize", async (c) => {
   try {
     cfg = clioConfigFromEnv(c.env);
   } catch (err) {
-    console.error("connector not configured:", err);
+    console.error("connector not configured:", err instanceof Error ? err.message : String(err));
     return c.json({ error: "temporarily_unavailable", error_description: "Connector is not configured" }, 503);
   }
 
@@ -107,14 +107,15 @@ clioHandler.get("/clio/callback", async (c) => {
     });
     return c.redirect(redirectTo, 302);
   } catch (err) {
-    // Clio exchange/identity failure, or a store/mint fault. Log the real cause; keep the page generic.
-    console.error("Clio callback failed:", err);
+    // Clio exchange/identity failure, or a store/mint fault. Log the message (not the raw error, which
+    // could carry response detail); keep the page generic.
+    console.error("Clio callback failed:", err instanceof Error ? err.message : String(err));
     return c.html(errorPage("Could not complete Clio sign-in. Please close this tab and try again."), 502);
   }
 });
 
 clioHandler.onError((err, c) => {
-  console.error("clio handler error:", err);
+  console.error("clio handler error:", err instanceof Error ? err.message : String(err));
   return c.json({ error: "server_error" }, 500);
 });
 
