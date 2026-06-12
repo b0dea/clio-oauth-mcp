@@ -31,6 +31,14 @@
   "vars": {
     "CLIO_REGION": "EU",
     "WORKER_BASE_URL": "https://clio-oauth-mcp.beatech.workers.dev"
+    // Firm login gate — set at least one before going live or NO ONE can connect (fail-closed).
+    // A Clio Manage private app is not firm-bound, so this is what restricts login to the firm.
+    // Comma-separated; either works. See src/remote/auth/allowlist.ts + docs/operations.md.
+    //   "ALLOWED_EMAIL_DOMAINS": "yourfirm.co.uk",   // who_am_i email domain (case-insensitive, exact)
+    //   "ALLOWED_CLIO_USER_IDS": "12345,67890"        // exact Clio who_am_i ids
+    // Tool write scope. Default (unset) = READ-ONLY: only read tools are registered. Set to "all" to
+    // also advertise the write tools — and register the Clio app read/write to match. See clioTools.ts.
+    //   "CLIO_WRITE_SCOPE": "all"
   },
 
   // Secrets are NOT here — set with `wrangler secret put`:

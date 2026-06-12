@@ -36,17 +36,26 @@ function payload(result: Awaited<ReturnType<Client["callTool"]>>) {
 }
 
 describe("MCP server", () => {
-  it("exposes clio_ping, clio_whoami, and the 21 clio_-prefixed Clio data tools", async () => {
+  it("read-only by default: exposes clio_ping, clio_whoami, and the 13 read tools (no writes)", async () => {
     const client = await connectedClient(deps());
     const names = (await client.listTools()).tools.map((t) => t.name);
-    expect(names).toHaveLength(23); // ping + whoami + 21 (upload_document is remote-incompatible)
+    expect(names).toHaveLength(15); // ping + whoami + 13 reads
     expect(names.every((n) => n.startsWith("clio_"))).toBe(true);
-    expect(names).toEqual(expect.arrayContaining(["clio_ping", "clio_whoami", "clio_list_matters", "clio_create_matter"]));
+    expect(names).toEqual(expect.arrayContaining(["clio_ping", "clio_whoami", "clio_list_matters"]));
+    expect(names).not.toContain("clio_create_matter");
     expect(names).not.toContain("clio_upload_document");
   });
 
-  it("annotates ping/whoami read-only and write tools as writes", async () => {
-    const client = await connectedClient(deps());
+  it("write-enabled (CLIO_WRITE_SCOPE=all): also exposes the write tools — 23 total", async () => {
+    const client = await connectedClient(deps({ writeEnabled: true }));
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).toHaveLength(23); // ping + whoami + 21 (upload_document is remote-incompatible)
+    expect(names).toEqual(expect.arrayContaining(["clio_create_matter", "clio_update_task"]));
+    expect(names).not.toContain("clio_upload_document");
+  });
+
+  it("annotates ping/whoami read-only and (when enabled) write tools as writes", async () => {
+    const client = await connectedClient(deps({ writeEnabled: true }));
     const ann = Object.fromEntries((await client.listTools()).tools.map((t) => [t.name, t.annotations]));
     expect(ann["clio_ping"]?.readOnlyHint).toBe(true);
     expect(ann["clio_whoami"]?.readOnlyHint).toBe(true);

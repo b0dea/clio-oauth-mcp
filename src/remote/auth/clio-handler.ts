@@ -16,6 +16,7 @@ import { Hono } from "hono";
 
 import type { Env, ConnectorProps } from "../env.js";
 import { consumePendingAuth, createPendingAuth, d1PendingAuthRepo } from "./state.js";
+import { isIdentityAllowed, parseAllowlist } from "./allowlist.js";
 import { buildClioAuthorizeUrl, exchangeClioCode, fetchClioIdentity } from "../clio/oauth.js";
 import { clioConfigFromEnv, requireEncryptionKey } from "../clio/connector.js";
 import { d1TokenRepo, saveClioConnection } from "../storage/tokenStore.js";
@@ -88,6 +89,18 @@ clioHandler.get("/clio/callback", async (c) => {
 
     const tokens = await exchangeClioCode(cfg, code, callbackRedirectUri(c.env.WORKER_BASE_URL));
     const identity = await fetchClioIdentity(c.env.CLIO_REGION, tokens.accessToken);
+
+    // Firm gate: reject anyone outside the allowlist BEFORE persisting or minting anything, so a
+    // non-firm Clio user can't deposit tokens in our store or obtain a session. Fail-closed.
+    const decision = isIdentityAllowed(identity, parseAllowlist(c.env));
+    if (!decision.allowed) {
+      console.error(`Clio login rejected (clioUserId=${identity.id}): ${decision.reason}`);
+      return c.html(
+        errorPage("This Clio account is not authorized to use this connector. Contact your administrator."),
+        403,
+      );
+    }
+
     const userId = `clio-${identity.id}`; // stable per Clio user; no ':' (the token format reserves it)
 
     await saveClioConnection(

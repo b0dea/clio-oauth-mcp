@@ -51,13 +51,18 @@ Nothing in code references the org, so this is just remotes + the §0 record.
    wrangler kv namespace create CLIO_TOKENS          # -> new id
    ```
    Paste the three new IDs into `wrangler.jsonc`.
-4. **Recreate the D1 schema:** `wrangler d1 execute clio-oauth-mcp --remote --file=src/remote/storage/schema.sql` (once the schema file exists — it creates `users` + `audit_log`).
+4. **Recreate the D1 schema:** `wrangler d1 migrations apply clio-oauth-mcp --remote` applies `migrations/0001` (`users`, `clio_tokens`, `pending_auth`). It does **not** apply `0002`/`0003` (the `audit_log` table) unless you also enable audit logging — see `docs/operations.md`.
 5. **Set secrets in the new account:**
    ```bash
-   wrangler secret put ENCRYPTION_KEY            # see the key-rotation note below
+   wrangler secret put ENCRYPTION_KEY            # generate FRESH on the new account — see the rule below
    wrangler secret put CLIO_CLIENT_ID
    wrangler secret put CLIO_CLIENT_SECRET
-   wrangler secret put COOKIE_ENCRYPTION_KEY
+   # COOKIE_ENCRYPTION_KEY is currently unused (no local consent page) — skip unless a script needs it.
+   ```
+   Set the firm login gate (vars, not secrets) — **without it no one can connect (fail-closed):**
+   ```bash
+   # In wrangler.jsonc "vars" (preferred, reviewable) or via secret put:
+   #   "ALLOWED_EMAIL_DOMAINS": "yourfirm.co.uk"   (or ALLOWED_CLIO_USER_IDS)
    ```
 6. **Deploy:** `wrangler deploy` → new URL (or custom domain, step 9).
 7. **Clio app redirect URI:** the app's redirect URI is `https://<WORKER_HOSTNAME>/clio/callback`. If the hostname changes:
@@ -88,11 +93,28 @@ in `wrangler.jsonc` once a domain is available.
 - [ ] New GitHub org repo exists; `origin` re-pointed; `upstream` unchanged; `GITHUB_FORK_ORG` updated.
 - [ ] `wrangler whoami` shows the new account; `account_id` updated in `wrangler.jsonc`.
 - [ ] New D1 + 2 KV namespaces created; IDs in `wrangler.jsonc`.
-- [ ] D1 schema applied in the new account.
-- [ ] All 4 secrets set in the new account (ENCRYPTION_KEY decision made).
+- [ ] D1 schema applied in the new account (`wrangler d1 migrations apply … --remote`).
+- [ ] Secrets set in the new account (`ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`; ENCRYPTION_KEY decision made).
+- [ ] **Firm allowlist set** (`ALLOWED_EMAIL_DOMAINS` and/or `ALLOWED_CLIO_USER_IDS`) — without it login is fail-closed.
 - [ ] (Optional) Pilot data migrated, or decision made to have users re-Connect.
 - [ ] Clio app redirect URI updated (or new app + users re-auth).
 - [ ] `wrangler deploy` succeeds; `/health` returns `region` correct; `/mcp` reachable.
 - [ ] Custom domain pointed (if used); connector URL updated in Claude (if host changed).
 - [ ] Smoke test: a user connects, `clio_whoami` returns them, a read tool returns their data.
 - [ ] Old pilot Worker + D1 + KV deleted.
+
+## Deploy security checklist (before real client data)
+
+- [ ] **Fresh `ENCRYPTION_KEY`** generated on the new account (`openssl rand -base64 32`). Do NOT reuse
+      the pilot key or the dev key in `.dev.vars` — both have been visible in working trees.
+- [ ] **Firm allowlist configured and verified.** Connect with a firm account (succeeds) and confirm a
+      non-firm Clio account is rejected with 403 (or trust the fail-closed default until set).
+- [ ] **`WORKER_BASE_URL` re-pinned** to the new host and **byte-identical** to the Clio app redirect URI.
+- [ ] **Rate limiter present:** the `AUTH_RATE_LIMITER` binding exists (it fails *open* if absent —
+      brute-force protection silently disappears). Verify with the loop in `docs/operations.md`.
+- [ ] **Local secrets rotated:** the GitHub PAT + context7/context.dev keys in `.mcp.json` (gitignored,
+      never committed, but live in the working tree) — rotate them.
+- [ ] **Write scope:** the connector is **read-only by default** (no write tools advertised). Leave it
+      that way for a read-only pilot. To enable writes, set `CLIO_WRITE_SCOPE=all` AND register the Clio
+      app read/write — the app scope is the authoritative backstop.
+- [ ] Consider a custom domain before onboarding (see above) so future moves need no user re-auth.

@@ -26,7 +26,9 @@ Every firm user who connects authorizes through this **one** app; their per-user
 The app registration also pins:
 - the **scopes** (app-level read-only vs. read/write per Clio resource — the connector-wide ceiling), and
 - the allowed **redirect URI**, which must be exactly `https://clio-oauth-mcp.beatech.workers.dev/clio/callback`
-  (derived from the request origin in `clio-handler.ts:callbackRedirectUri`; update both if the host changes).
+  (pinned to the `WORKER_BASE_URL` var in `clio-handler.ts:callbackRedirectUri`, never the request host,
+  so a preview URL or spoofed Host can't change it; update `WORKER_BASE_URL` and the Clio app together
+  if the host changes).
 
 You do **not** generate these — you register the app in the Clio Developer Portal and copy the values out.
 
@@ -45,6 +47,19 @@ AES-256-GCM key that encrypts every user's Clio tokens at rest in D1/KV (`storag
   The repo also ships `generateKeyBase64()` in `storage/crypto.ts`.
 - **Rotation** re-encrypts the store: rotating this key invalidates all stored tokens, so every user must
   reconnect. Treat it as long-lived.
+
+## ALLOWED_EMAIL_DOMAINS / ALLOWED_CLIO_USER_IDS — the firm login gate
+
+Not secrets (a domain isn't sensitive), but the control that restricts login to the firm. A Clio
+Manage private app is not firm-bound, so the connector enforces a server-side allowlist at
+`/clio/callback` against the `who_am_i` identity. **Fail-closed: if neither is set, no one can connect.**
+
+- **`ALLOWED_EMAIL_DOMAINS`** — comma-separated bare domains (e.g. `yourfirm.co.uk`), matched against the
+  authenticated user's email domain, case-insensitive and exact (a subdomain does not match).
+- **`ALLOWED_CLIO_USER_IDS`** — comma-separated exact Clio `who_am_i` ids, to pin specific people.
+
+Set either in `wrangler.jsonc` `vars` or via `wrangler secret put`. See `docs/operations.md` →
+"Firm allowlist" and `src/remote/auth/allowlist.ts`.
 
 ## COOKIE_ENCRYPTION_KEY — currently unused
 

@@ -35,6 +35,9 @@ api.all("/mcp", async (c) => {
   const userId = props.userId;
   const deps: McpDeps = {
     auth: { userId, clioUserId: props.clioUserId },
+    // Read-only unless the operator explicitly opts into writes. Default off keeps the write tools
+    // unadvertised so the model can't issue an unintended (or injection-driven) write to Clio.
+    writeEnabled: env.CLIO_WRITE_SCOPE === "all",
     whoami: async () => {
       const { accessToken, region, expiresAt } = await getUserClioToken(env, userId);
       const id = await fetchClioIdentity(region, accessToken);

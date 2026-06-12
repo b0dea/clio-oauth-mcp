@@ -38,6 +38,9 @@ tokens.enc
 .claude/
 CLAUDE.md
 
+# Local security-audit reports (gstack /cso) — keep findings off the remote
+.gstack/
+
 # Remote / Cloudflare Workers (fork additions)
 .mcp.json
 .wrangler/

@@ -33,12 +33,14 @@ export interface WhoamiResult {
 export interface McpDeps {
   auth: AuthContext;
   whoami(): Promise<WhoamiResult>;
+  /** When false (default), only read tools are registered — the write tools are not advertised. */
+  writeEnabled?: boolean;
 }
 
 // Stateless: a fresh server is built per request (see mcp/api.ts). The remote shell adds
-// clio_ping (liveness) and clio_whoami (connected-identity); M4 adds the 22 clio_-prefixed Clio
-// data tools, which resolve the caller's token through the per-request SessionContext the api
-// handler installs.
+// clio_ping (liveness) and clio_whoami (connected-identity); the clio_-prefixed Clio data tools
+// resolve the caller's token through the per-request SessionContext the api handler installs. Reads
+// always register; writes only when deps.writeEnabled (CLIO_WRITE_SCOPE=all) — default read-only.
 export function buildMcpServer(deps?: McpDeps): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
@@ -86,7 +88,7 @@ export function buildMcpServer(deps?: McpDeps): McpServer {
     },
   );
 
-  registerClioDataTools(server);
+  registerClioDataTools(server, deps?.writeEnabled ?? false);
 
   return server;
 }

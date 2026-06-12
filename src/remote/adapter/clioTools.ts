@@ -63,11 +63,17 @@ export const CLIO_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
  * Wrap an McpServer so each `registerTool(name, config, cb)` lands as `clio_<name>` with the
  * tool's annotations merged in. A Proxy keeps every other McpServer member intact, so the
  * unmodified upstream register functions can drive it directly.
+ *
+ * `writeEnabled` defaults the connector to read-only: a write tool (annotated `readOnlyHint:false`)
+ * is not even advertised unless writes are explicitly turned on (CLIO_WRITE_SCOPE=all). This is
+ * defense-in-depth over the Clio app's own scope — the app permission set is the authoritative gate,
+ * this stops the connector from offering a write tool the model could call by mistake or via injection.
  */
-export function withClioToolPrefix(server: McpServer): McpServer {
+export function withClioToolPrefix(server: McpServer, writeEnabled: boolean): McpServer {
   const registerTool = (name: string, config: { annotations?: ToolAnnotations } & Record<string, unknown>, cb: unknown) => {
     if (REMOTE_INCOMPATIBLE_TOOLS.has(name)) return; // never registered on the Worker
     const annotations = CLIO_TOOL_ANNOTATIONS[name];
+    if (!writeEnabled && annotations?.readOnlyHint === false) return; // read-only: skip write tools
     const merged = annotations ? { ...config, annotations: { ...config.annotations, ...annotations } } : config;
     return (server.registerTool as (...args: unknown[]) => unknown)(`${TOOL_PREFIX}${name}`, merged, cb);
   };
@@ -80,9 +86,12 @@ export function withClioToolPrefix(server: McpServer): McpServer {
   });
 }
 
-/** Register the 21 portable upstream Clio data tools onto `server`, clio_-prefixed and annotated. */
-export function registerClioDataTools(server: McpServer): void {
-  const s = withClioToolPrefix(server);
+/**
+ * Register the portable upstream Clio data tools onto `server`, clio_-prefixed and annotated. Read
+ * tools always register; the write tools register only when `writeEnabled` is true (default off).
+ */
+export function registerClioDataTools(server: McpServer, writeEnabled: boolean): void {
+  const s = withClioToolPrefix(server, writeEnabled);
   registerMatterTools(s);
   registerContactTools(s);
   registerDocumentTools(s);

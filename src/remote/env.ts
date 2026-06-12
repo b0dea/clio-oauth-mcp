@@ -24,6 +24,18 @@ export interface Env {
   // and deploys no audit_log table by default. To enable: set this var AND apply migrations 0002/0003
   // (which create the append-only audit_log table). Unset = off. — M5
   AUDIT_LOG_ENABLED?: string;
+  // Firm allowlist (Leg-2 login gate). Only Clio identities matching one of these may complete login;
+  // a Clio Manage private app is not firm-bound, so this is what restricts the connector to the firm.
+  // FAIL-CLOSED: if BOTH are unset, no user can connect — set at least one before going live.
+  // Comma-separated. ALLOWED_EMAIL_DOMAINS: bare domains matched against the who_am_i email
+  // (case-insensitive, exact). ALLOWED_CLIO_USER_IDS: exact who_am_i ids. — see auth/allowlist.ts
+  ALLOWED_EMAIL_DOMAINS?: string;
+  ALLOWED_CLIO_USER_IDS?: string;
+  // Tool write scope. Default (unset / anything but "all") = READ-ONLY: the connector registers only
+  // read tools, so the model can't issue a write to Clio. Set to "all" to also register the write
+  // tools (create/update/complete). The Clio app's own permission set is the authoritative backstop;
+  // this gate just controls what the connector advertises. — see adapter/clioTools.ts
+  CLIO_WRITE_SCOPE?: string;
   // Secrets (set via `wrangler secret put`). Optional so the Worker type-checks before
   // the M3 Clio broker needs them.
   ENCRYPTION_KEY?: string;

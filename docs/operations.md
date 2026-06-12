@@ -21,6 +21,8 @@ npx wrangler tail             # live logs
 Bindings (in `wrangler.jsonc`): `OAUTH_KV`, `CLIO_TOKENS` (KV), `DB` (D1), `AUTH_RATE_LIMITER`
 (Rate Limiting), vars `CLIO_REGION=EU` and `WORKER_BASE_URL` (the public origin — the Leg-2
 redirect_uri is pinned to it; keep it equal to the host and to the URI registered on the Clio app).
+Login gate: `ALLOWED_EMAIL_DOMAINS` / `ALLOWED_CLIO_USER_IDS` (see "Firm allowlist" below) —
+**must be set before going live**, or no one can connect.
 
 ## Secrets & key rotation
 
@@ -63,9 +65,35 @@ wrangler secret list
 
 One **private** app in the Clio Developer Portal (EU region) against the firm's Clio account:
 - Redirect URI: `https://clio-oauth-mcp.beatech.workers.dev/clio/callback` (update if the host changes).
-- Access permissions: read/write per `V1_WRITE_SCOPE=all`.
+- Access permissions: **read-only** to match the connector's default. Only grant read/write if you set
+  `CLIO_WRITE_SCOPE=all` (see "Read-only by default" below).
 - Copy `client_id`/`client_secret` into the secrets above.
 - Private app = single firm, no Clio review needed. (See `docs/build-notes.md` §0/§6.)
+
+## Firm allowlist — who may connect
+
+A Clio Manage **private** app is *not* firm-bound at Clio's side ("private" only means "not listed in
+the App Directory"), so without this gate any Clio user who reaches `/authorize` could complete login
+(they'd see only their own Clio data, but they'd still get a session on the firm's infra). The
+connector enforces a firm allowlist at `/clio/callback`, checked against the Clio-attested `who_am_i`
+identity **before** any token is stored or minted. Implemented in `src/remote/auth/allowlist.ts`.
+
+**Fail-closed:** if neither var is set, **no one** can connect. Set at least one before onboarding.
+
+```bash
+# Either is sufficient; set as wrangler vars (not secret — a domain isn't sensitive) or via secret put.
+# Comma-separated.
+#   ALLOWED_EMAIL_DOMAINS — bare domains, matched against the who_am_i email (case-insensitive, EXACT;
+#                           a subdomain is not a match). Best default for a whole firm.
+#   ALLOWED_CLIO_USER_IDS — exact Clio who_am_i ids; use to pin specific people.
+# In wrangler.jsonc "vars":  "ALLOWED_EMAIL_DOMAINS": "yourfirm.co.uk"
+# or out-of-band:
+wrangler secret put ALLOWED_EMAIL_DOMAINS    # e.g. "yourfirm.co.uk,yourfirm.com"
+```
+
+A rejected login gets a 403 page and leaves no row in D1. Rejections are visible in `wrangler tail`
+(`Clio login rejected (clioUserId=…)`). Changing the allowlist takes effect on the next login; it does
+not revoke already-connected users — off-board those by purging their rows (see "Remove" below).
 
 ## Add / remove the connector (Claude org)
 
@@ -81,10 +109,12 @@ Save. The connector is then available to every member — no one else has to add
    credentials and approves.
 3. Done — Claude now acts on that user's own Clio data, isolated from everyone else's.
 
-Per-tool toggles are **opt-out**: with `V1_WRITE_SCOPE=all` the write tools (create/update/complete)
-are registered and on by default. At rollout, tell users they can disable individual tools in the
-connector's tool list, and that Clio's own per-user permissions are the backstop (PRD §7). To ship a
-read-only connector instead, register a read-only Clio app and set `V1_WRITE_SCOPE=read-only`.
+**Read-only by default.** The connector registers only the 13 read tools unless `CLIO_WRITE_SCOPE=all`
+is set — the 8 write tools (create/update/complete) are not even advertised, so the model can't issue
+a write to Clio (intended or injection-driven). To enable writes: set `CLIO_WRITE_SCOPE=all` **and**
+register the Clio app with read/write permissions (the app scope is the authoritative backstop;
+PRD §7). Even with writes on, users can disable individual tools in the connector's tool list and
+Clio's own per-user permissions still apply.
 
 **Remove:**
 - *Whole firm* — Organization settings → Connectors → the connector → **Remove**. Every user loses it.
