@@ -65,7 +65,7 @@ export const CLIO_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
  * unmodified upstream register functions can drive it directly.
  *
  * `writeEnabled` defaults the connector to read-only: a write tool (annotated `readOnlyHint:false`)
- * is not even advertised unless writes are explicitly turned on (CLIO_WRITE_SCOPE=all). This is
+ * is not even advertised unless writes are explicitly turned on (V1_WRITE_SCOPE=all). This is
  * defense-in-depth over the Clio app's own scope — the app permission set is the authoritative gate,
  * this stops the connector from offering a write tool the model could call by mistake or via injection.
  */

@@ -8,6 +8,34 @@ or adds a new module (merge-safe).
 
 ---
 
+## 2026-06-12 — M8: firm login allowlist + read-only-by-default tool scope (security)
+
+Follows a comprehensive security audit. All changes are **merge-safe** — a new `auth/allowlist.ts`, a
+`writeEnabled` flag threaded through the adapter, and doc updates. **No upstream tool files edited.**
+
+- **Firm login allowlist** — new `src/remote/auth/allowlist.ts` (`parseAllowlist`/`isIdentityAllowed`),
+  enforced in `auth/clio-handler.ts` at `/clio/callback` **after** `fetchClioIdentity` and **before**
+  `saveClioConnection`/`completeAuthorization`, so a rejected identity stores nothing and gets no token.
+  **Why:** a Clio Manage *private* app is **not firm-bound** ("private" only means unlisted), so without
+  this gate any Clio user reaching `/authorize` could complete login (they'd see only their own data, but
+  still land a session on firm infra). Matched against the Clio-attested `who_am_i`: `ALLOWED_EMAIL_DOMAINS`
+  (email domain, case-insensitive, exact) and/or `ALLOWED_CLIO_USER_IDS` (exact ids). **Fail-closed** — with
+  neither set, no one connects. Cross-user isolation already held; this closes "who can log in."
+- **Read-only by default** — `adapter/clioTools.ts` `withClioToolPrefix(server, writeEnabled)` skips every
+  write tool (annotated `readOnlyHint:false`) unless `V1_WRITE_SCOPE=all`. Threaded via `McpDeps.writeEnabled`
+  (`mcp/server.ts`) ← `env.V1_WRITE_SCOPE === "all"` (`mcp/api.ts`). Default → 13 read tools (15 with
+  ping/whoami); `=all` → 23. Defense-in-depth over the Clio app scope so an injection can't drive a write
+  that isn't advertised. stdio build unaffected (it registers upstream tools directly, not via the adapter).
+- **Docs** — `operations.md` ("Firm allowlist", "Read-only by default"), `credentials.md`, `migration.md`
+  (deploy security checklist), `wrangler.jsonc`, plus README.local/PRD/build-notes/`src/remote/README.md`
+  reconciled. Fixed the stale "redirect URI derived from request origin" and the non-existent `schema.sql`
+  migration step; gitignored `.gstack/` audit reports. **No code var named `V1_WRITE_SCOPE` existed before**
+  — it was a PRD §0 placeholder; M8 implements it.
+- **Tests:** +14 (allowlist decision logic; `/clio/callback` reject / fail-closed / pass-through; read-only
+  vs write-enabled tool registration). **182 green.** typecheck:worker, stdio `build`, `wrangler --dry-run` clean.
+- **Operator action before go-live:** set `ALLOWED_EMAIL_DOMAINS` (else login is fail-closed) and keep the
+  Clio app read-only unless `V1_WRITE_SCOPE=all`.
+
 ## 2026-06-11 — M7: evals + docs completeness + upstream-sync dry run (clean no-op)
 
 Final milestone (PRD §M7 / §9 / §8). All changes are **merge-safe** — a new `evals/` file, `docs/`

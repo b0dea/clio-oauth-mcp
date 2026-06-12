@@ -13,8 +13,9 @@
 
 **Resolved values (2026-06-11):** firm is **UK** → `CLIO_REGION=EU` (`eu.app.clio.com`); fork owner `b0dea`;
 deploy to CF account `Alex@beatech.dev's Account` (`3699b6ddabe8729341468d6ebfe8a4ea`); `*.workers.dev`
-staging; `V1_WRITE_SCOPE=all` (register all 26 tools, Clio app read/write, per-tool gating left to Claude
-Desktop). **Portability requirement:** org/account/hostname/region/client-IDs live in `wrangler.jsonc` +
+staging; `V1_WRITE_SCOPE=read-only` by default (M8 — only read tools registered; set `=all` + Clio app
+read/write to enable the writes). Login is gated to the firm by `ALLOWED_EMAIL_DOMAINS`/`ALLOWED_CLIO_USER_IDS`
+(fail-closed). **Portability requirement:** org/account/hostname/region/client-IDs live in `wrangler.jsonc` +
 secrets + git remotes only — never hardcoded in TypeScript — so git/CF/domain can be re-pointed without code changes.
 
 - One Worker deployment serves **one law firm** (= one Clio account, many users).
@@ -230,8 +231,10 @@ tools get replaced per §5/M3/M5.
 
 **Write tools (9):** `create_matter`, `upload_document`, `create_task`, `update_task`,
 `complete_task`, `create_calendar_entry`, `log_time_entry`, `create_activity`, `create_note`.
-If `V1_WRITE_SCOPE=read-only`, gate **all nine** in the `registerTool` adapter — and set the
-Clio app's permissions to read-only too (scope is app-level, §6).
+**M8 (done):** the connector is **read-only by default** — the `registerTool` adapter
+(`adapter/clioTools.ts`) skips every write tool unless `V1_WRITE_SCOPE=all`. Set the Clio app's
+permissions to match (read-only unless you enable writes); scope is app-level (§6) and the authoritative
+backstop. On the Worker `upload_document` is dropped regardless (needs local fs), so 8 writes are gated.
 
 ---
 

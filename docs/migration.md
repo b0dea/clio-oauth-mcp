@@ -115,6 +115,6 @@ in `wrangler.jsonc` once a domain is available.
 - [ ] **Local secrets rotated:** the GitHub PAT + context7/context.dev keys in `.mcp.json` (gitignored,
       never committed, but live in the working tree) — rotate them.
 - [ ] **Write scope:** the connector is **read-only by default** (no write tools advertised). Leave it
-      that way for a read-only pilot. To enable writes, set `CLIO_WRITE_SCOPE=all` AND register the Clio
+      that way for a read-only pilot. To enable writes, set `V1_WRITE_SCOPE=all` AND register the Clio
       app read/write — the app scope is the authoritative backstop.
 - [ ] Consider a custom domain before onboarding (see above) so future moves need no user re-auth.

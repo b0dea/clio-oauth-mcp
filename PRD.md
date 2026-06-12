@@ -4,7 +4,7 @@
 **Goal:** turn a local, single-user Clio MCP server into a **remote, multi-user** MCP connector that a law firm adds **once** as a custom connector (Claude Desktop / Team / Enterprise), where **each user authenticates with their own Clio account** via OAuth — one click of "Connect" per attorney, nothing else.
 **Build strategy:** **fork** `oktopeak/clio-mcp` and keep it merge-friendly so upstream fixes can be pulled indefinitely.
 
-**Deployment model (decided — see `README.local.md` / `docs/build-notes.md`):** **single-firm, private Clio app, per-user OAuth.** "Multi-tenant" here means *multi-user within one law firm* (one Clio account, many users), **not** a public connector shared across different firms. This avoids Clio's public-app review/App Directory gate entirely — a **private** Clio app can be authorized by the users of that single firm with no Clio approval. There is **no API-key fallback**: Clio is OAuth-only, and per-user OAuth via a private app is the lowest-friction path that works.
+**Deployment model (decided — see `README.local.md` / `docs/build-notes.md`):** **single-firm, private Clio app, per-user OAuth.** "Multi-tenant" here means *multi-user within one law firm* (one Clio account, many users), **not** a public connector shared across different firms. This avoids Clio's public-app review/App Directory gate entirely — a **private** Clio app needs no Clio approval. **Security correction (M8):** a Clio *Manage* private app is **not firm-bound** — "private" only means unlisted, so any Clio user could authorize. The single-firm restriction is therefore enforced by an **application-level allowlist** (`ALLOWED_EMAIL_DOMAINS`/`ALLOWED_CLIO_USER_IDS`, checked against `who_am_i`, fail-closed; §7/§M6), **not** by Clio. There is **no API-key fallback**: Clio is OAuth-only, and per-user OAuth via a private app is the lowest-friction path that works.
 
 > Read this whole document before writing code. Several sections constrain *how* you implement, not just *what*. The hard part is auth and upstream-merge discipline, not the Clio tools (those already exist in the fork).
 >
@@ -22,7 +22,8 @@ These are the only project-specific unknowns. Resolve them (ask the operator if 
 | `CLOUDFLARE_ACCOUNT` | `Alex@beatech.dev's Account` (`3699b6ddabe8729341468d6ebfe8a4ea`) | Personal CF account; set as `account_id` in `wrangler.jsonc`. |
 | `WORKER_HOSTNAME` | `*.workers.dev` (staging; custom domain TBD) | Swap via `routes`/`name` in `wrangler.jsonc`, no source change. |
 | `CLIO_REGION` | `EU` → `eu.app.clio.com` | UK firm → Clio EU region. Worker var; drives all Clio base + OAuth URLs. |
-| `V1_WRITE_SCOPE` | `all` | Register everything the fork exposes (all 26 tools incl. the 9 writes); Clio app = read/write; users gate per-tool in Claude Desktop. Each user only acts on their own Clio with their own Clio-side permissions. |
+| `V1_WRITE_SCOPE` | `read-only` (default; `all` to enable writes) | Read-only by default — only read tools registered. `=all` advertises the write tools (set the Clio app read/write to match). Users gate per-tool in Claude; each acts only on their own Clio with their own Clio-side permissions. |
+| `FIRM_ALLOWLIST` | `ALLOWED_EMAIL_DOMAINS` / `ALLOWED_CLIO_USER_IDS` (required, fail-closed) | Restricts login to the firm (a Clio Manage private app is not firm-bound). Checked against `who_am_i` at `/clio/callback`. |
 | `DEPLOYMENT_MODEL` | `single-firm` (decided) | One private Clio app per firm's Clio account; per-user OAuth; no public App Directory listing. |
 
 Values resolved 2026-06-11 (recorded in `README.local.md`). **Built for portability** — nothing project-specific (org, account, hostname, region, client IDs) is hardcoded in TypeScript; it's all `wrangler.jsonc` config + `wrangler secret` + git remotes, so the operator can re-point git/CF/domain without code changes.
@@ -149,6 +150,7 @@ Pull these before/while coding; APIs and versions move:
 ### M6 — Hardening + deploy + wire Claude org
 - **Isolation test (must pass):** authenticated as user A, attempt by any means to reach user B's tokens/data → impossible. Add an automated test.
 - Validate token **audience** on every request; enforce redirect-URI allowlist; CSRF/state on both OAuth legs; PKCE mandatory; rate-limit the public endpoints.
+- **Firm login allowlist (M8):** restrict who may complete Leg 2 to the firm — check the `who_am_i` identity at `/clio/callback` against `ALLOWED_EMAIL_DOMAINS`/`ALLOWED_CLIO_USER_IDS` **before** storing tokens or minting a Leg-1 token; reject (403) otherwise. **Fail-closed** (no allowlist → no logins). A Clio Manage private app is not firm-bound, so this is what enforces single-firm.
 - Secrets only via `wrangler secret put` (`ENCRYPTION_KEY`, `CLIO_CLIENT_ID`, `CLIO_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY`). Nothing sensitive in the repo. Document key-rotation.
 - Register **one private** Clio developer app against the firm's own Clio account (no public review / App Directory listing); set its redirect URI to `https://WORKER_HOSTNAME/clio/callback` and its access permissions to match `V1_WRITE_SCOPE`.
 - Deploy to `WORKER_HOSTNAME`. Org Owner adds the connector: **Organization settings → Connectors → Add →** `https://WORKER_HOSTNAME/mcp`. Each user connects and OAuths their own Clio.

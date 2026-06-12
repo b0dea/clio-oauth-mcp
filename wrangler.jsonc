@@ -38,7 +38,7 @@
     //   "ALLOWED_CLIO_USER_IDS": "12345,67890"        // exact Clio who_am_i ids
     // Tool write scope. Default (unset) = READ-ONLY: only read tools are registered. Set to "all" to
     // also advertise the write tools — and register the Clio app read/write to match. See clioTools.ts.
-    //   "CLIO_WRITE_SCOPE": "all"
+    //   "V1_WRITE_SCOPE": "all"
   },
 
   // Secrets are NOT here — set with `wrangler secret put`:

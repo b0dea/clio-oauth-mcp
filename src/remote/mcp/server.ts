@@ -40,7 +40,7 @@ export interface McpDeps {
 // Stateless: a fresh server is built per request (see mcp/api.ts). The remote shell adds
 // clio_ping (liveness) and clio_whoami (connected-identity); the clio_-prefixed Clio data tools
 // resolve the caller's token through the per-request SessionContext the api handler installs. Reads
-// always register; writes only when deps.writeEnabled (CLIO_WRITE_SCOPE=all) — default read-only.
+// always register; writes only when deps.writeEnabled (V1_WRITE_SCOPE=all) — default read-only.
 export function buildMcpServer(deps?: McpDeps): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 

@@ -11,7 +11,8 @@ Both OAuth legs are live, the Clio tools are ported multi-tenant, and the connec
 Leg 1 (Claude ⇄ us) is `new OAuthProvider({...})` (DCR, PKCE-S256, `/authorize`, `/token`, `/.well-known/*`);
 Leg 2 (us ⇄ Clio) is the Clio broker (`auth/clio-handler.ts`): `/authorize` → Clio, `/clio/callback` exchanges
 the code, reads `who_am_i`, encrypts the per-user tokens into D1 (`storage/`), and mints the Leg-1 token bound
-to the real Clio user. `adapter/clioTools.ts` registers 21 upstream Clio tools `clio_`-prefixed + annotated, and
+to the real Clio user. `adapter/clioTools.ts` registers the upstream Clio tools `clio_`-prefixed + annotated
+(**read-only by default** — write tools are skipped unless `V1_WRITE_SCOPE=all`), and
 `mcp/api.ts` runs each MCP turn inside `sessionStorage.run(ctx)` so every tool resolves THIS user's token via
 the upstream `AsyncLocalStorage` seam (`adapter/sessionContext.ts` + `getUserClioToken`). Node-hostile upstream
 deps (keyring/fs) are swapped for `upstream-shims/` via the wrangler `alias` map. Live tool calls stop at
@@ -35,6 +36,11 @@ works). The D1 holds only the per-user OAuth token store. To enable audit: apply
 **M7 done:** 10 read-only eval questions in `evals/clio-evals.xml` (PRD §9), `docs/operations.md` completed
 (connector add/remove section added), and the upstream-sync dry run was a clean no-op (upstream unchanged
 since the fork — HEAD `d85f3be`). The build is complete; live two-user acceptance remains gated on a real Clio app.
+
+**M8 security:** firm login allowlist (`auth/allowlist.ts`) enforced at `/clio/callback` against the Clio
+`who_am_i` identity, **before** any token is stored or minted — `ALLOWED_EMAIL_DOMAINS`/`ALLOWED_CLIO_USER_IDS`,
+fail-closed (unset → no logins). A Clio Manage private app is not firm-bound, so this is what restricts login
+to the firm. Plus **read-only by default**: the adapter registers only read tools unless `V1_WRITE_SCOPE=all`.
 
 ```bash
 npm install
@@ -65,6 +71,7 @@ wrangler secret put COOKIE_ENCRYPTION_KEY   # signs the consent cookie
 | M3 | Per-user encrypted token store (AES-256-GCM via SubtleCrypto; D1 primary, KV cache) | `storage/` |
 | M4 | Registration adapter — prefix tools `clio_`, inject the per-user Clio client via the upstream `AsyncLocalStorage` seam | `adapter/` |
 | M5 | Centralized audit log → D1 `audit_log` (append-only); **off by default** behind `AUDIT_LOG_ENABLED`, table not deployed until enabled | `storage/auditStore.ts` + `upstream-shims/auditLog.ts` |
+| M8 | Firm login allowlist (fail-closed) + read-only-by-default tool scope (`V1_WRITE_SCOPE=all` to enable writes) | `auth/allowlist.ts` + `adapter/clioTools.ts` |
 
 ## The injection seam (no tool edits)
 

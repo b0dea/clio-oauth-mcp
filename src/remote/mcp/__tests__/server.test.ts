@@ -46,7 +46,7 @@ describe("MCP server", () => {
     expect(names).not.toContain("clio_upload_document");
   });
 
-  it("write-enabled (CLIO_WRITE_SCOPE=all): also exposes the write tools — 23 total", async () => {
+  it("write-enabled (V1_WRITE_SCOPE=all): also exposes the write tools — 23 total", async () => {
     const client = await connectedClient(deps({ writeEnabled: true }));
     const names = (await client.listTools()).tools.map((t) => t.name);
     expect(names).toHaveLength(23); // ping + whoami + 21 (upload_document is remote-incompatible)

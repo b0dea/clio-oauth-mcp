@@ -31,11 +31,11 @@ export interface Env {
   // (case-insensitive, exact). ALLOWED_CLIO_USER_IDS: exact who_am_i ids. — see auth/allowlist.ts
   ALLOWED_EMAIL_DOMAINS?: string;
   ALLOWED_CLIO_USER_IDS?: string;
-  // Tool write scope. Default (unset / anything but "all") = READ-ONLY: the connector registers only
-  // read tools, so the model can't issue a write to Clio. Set to "all" to also register the write
-  // tools (create/update/complete). The Clio app's own permission set is the authoritative backstop;
-  // this gate just controls what the connector advertises. — see adapter/clioTools.ts
-  CLIO_WRITE_SCOPE?: string;
+  // Tool write scope (PRD §0). Default (unset / anything but "all", e.g. "read-only") = READ-ONLY: the
+  // connector registers only read tools, so the model can't issue a write to Clio. Set to "all" to also
+  // register the write tools (create/update/complete). The Clio app's own permission set is the
+  // authoritative backstop; this gate just controls what the connector advertises. — adapter/clioTools.ts
+  V1_WRITE_SCOPE?: string;
   // Secrets (set via `wrangler secret put`). Optional so the Worker type-checks before
   // the M3 Clio broker needs them.
   ENCRYPTION_KEY?: string;

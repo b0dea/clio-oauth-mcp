@@ -6,22 +6,28 @@ stays as-is; everything specific to *our* remote/multi-user build lives here and
 
 ---
 
-## Status — M7 build complete (M0–M7: hardened + cross-user isolation proven; evals + docs delivered; awaiting real Clio app)
+## Status — M8 build complete (M0–M8: hardened + cross-user isolation proven; firm login allowlist + read-only-by-default; awaiting real Clio app)
 
 - **Live:** `https://clio-oauth-mcp.beatech.workers.dev` — full two-leg OAuth + the ported tools. Leg 1
   (Claude ⇄ us) is the `@cloudflare/workers-oauth-provider` AS + RS; Leg 2 (us ⇄ Clio) is the Clio broker:
   `/authorize` redirects to Clio, `/clio/callback` exchanges the code, reads `who_am_i`,
   **AES-256-GCM-encrypts** the per-user tokens into D1, and mints the Leg-1 token bound to the real Clio
-  user. **M4:** `/mcp` now serves 23 tools — `clio_ping`, `clio_whoami`, and 21 `clio_`-prefixed Clio data
-  tools, each acting as the authenticated caller's own Clio account via the upstream AsyncLocalStorage seam
-  (the 22nd, `upload_document`, is stdio-only — it reads a local file path a Worker can't reach). `/mcp` is
-  bearer-gated.
+  user. **M4:** `/mcp` serves `clio_ping`, `clio_whoami`, and the `clio_`-prefixed Clio data tools, each
+  acting as the authenticated caller's own Clio account via the upstream AsyncLocalStorage seam
+  (`upload_document` is stdio-only — it reads a local file path a Worker can't reach). **M8 — read-only by
+  default:** only the 13 read tools are registered (15 incl. ping/whoami) unless `V1_WRITE_SCOPE=all`, which
+  adds the 8 write tools (23 total). `/mcp` is bearer-gated.
 - **M6 hardening:** the Leg-2 `redirect_uri` is pinned to the new `WORKER_BASE_URL` var (not the request
   host); the public OAuth endpoints (`/authorize`, `/token`, `/register`, `/clio/callback`) are rate-limited
   per IP via the `AUTH_RATE_LIMITER` native binding (60/60s → `429`, ephemeral counters, no log); audience
   (RFC-8707 `resource`→400), PKCE S256-only, and single-use Leg-2 CSRF state are enforced + tested. An
   **automated cross-user isolation test** proves no path lets user A reach user B's token/data (real seam,
   end-to-end). A security-weighted review found all M6 properties sound.
+- **M8 security (firm login gate):** a Clio Manage **private** app is *not* firm-bound (private only means
+  "not in the App Directory"), so login is restricted to the firm by a server-side allowlist at
+  `/clio/callback` — `ALLOWED_EMAIL_DOMAINS`/`ALLOWED_CLIO_USER_IDS`, checked against the Clio `who_am_i`
+  identity, **fail-closed** (unset → no one connects). Write tools are **off by default**; set
+  `V1_WRITE_SCOPE=all` to enable them. See `docs/operations.md` ("Firm allowlist", "Read-only by default").
 - **No hosted logs by default (operator decision):** audit logging (M5, a D1 `audit_log`) is present but
   **off** behind `AUDIT_LOG_ENABLED` — no writer runs and the `audit_log` table isn't deployed unless
   enabled. `observability` is `false` (no Workers request logs; `wrangler tail` still works). The D1 holds
@@ -77,7 +83,8 @@ register the private Clio app, deploy the Worker, set secrets, add the connector
 | `CLOUDFLARE_ACCOUNT` | **`Alex@beatech.dev's Account`** · id `3699b6ddabe8729341468d6ebfe8a4ea` | Personal CF account (from `wrangler whoami`). Set as `account_id` in `wrangler.jsonc` only. |
 | `WORKER_HOSTNAME` | **`*.workers.dev`** (staging) | Custom domain TBD; swap by editing `routes`/`name` in `wrangler.jsonc`, no source change. |
 | `CLIO_REGION` | **`EU`** → `eu.app.clio.com` | UK firm → Clio EMEA/EU region (confirmed). Worker var; drives all Clio base + OAuth URLs. OAuth on the same host: `eu.app.clio.com/oauth/*` (not `auth.api.clio.com`). |
-| `V1_WRITE_SCOPE` | **`all`** | Register **everything the fork exposes** (all 26 tools incl. the 9 writes). Clio app permissions = read/write. Per-tool allow/deny is left to each user inside Claude Desktop. Safe because every user only ever acts on **their own** Clio with their own Clio-side permissions. |
+| `V1_WRITE_SCOPE` | **`read-only`** (default) | Read-only by default — only the 13 read tools are registered. Set `=all` to also advertise the 8 write tools and register the Clio app read/write to match. Per-tool allow/deny is still left to each user in Claude; every user only ever acts on **their own** Clio with their own Clio-side permissions. |
+| `FIRM_ALLOWLIST` | `ALLOWED_EMAIL_DOMAINS` and/or `ALLOWED_CLIO_USER_IDS` | **Required before go-live (fail-closed).** Restricts login to the firm — a Clio Manage private app is not firm-bound, so the connector checks the `who_am_i` identity at `/clio/callback`. Set as wrangler `vars` or secrets. See `docs/operations.md`. |
 
 `CLIO_REGION` host map: US `app.clio.com` · EU `eu.app.clio.com` · CA `ca.app.clio.com` ·
 AU `au.app.clio.com` (all `/api/v4`).
@@ -102,8 +109,11 @@ Nothing project-specific (org, account, hostname, region, client IDs) is baked i
 - **26 tools across 9 resource areas**, not 7.
 - **"ABA-Opinion-512" is marketing**, not a code feature — the audit log is generic JSONL.
 - **AES-256-GCM helper is rewritten, not ported** (Node `crypto` → Workers SubtleCrypto).
-- **No Clio public-app review needed** for the single-firm model (the blocker only applies to
-  cross-firm public connectors).
+- **No Clio public-app review needed** for the single-firm model (the App Directory review only applies to
+  cross-firm public connectors). **But note:** a Clio Manage *private* app is **not firm-bound** — "private"
+  only means unlisted, so any Clio user could otherwise authorize. The firm restriction is enforced by our
+  own allowlist (M8), not by Clio. (A Clio *Platform* private app bound to a Firm ID would gate this at
+  Clio's side too — a possible later hardening.)
 
 Full detail in `docs/build-notes.md`.
 

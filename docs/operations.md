@@ -66,7 +66,7 @@ wrangler secret list
 One **private** app in the Clio Developer Portal (EU region) against the firm's Clio account:
 - Redirect URI: `https://clio-oauth-mcp.beatech.workers.dev/clio/callback` (update if the host changes).
 - Access permissions: **read-only** to match the connector's default. Only grant read/write if you set
-  `CLIO_WRITE_SCOPE=all` (see "Read-only by default" below).
+  `V1_WRITE_SCOPE=all` (see "Read-only by default" below).
 - Copy `client_id`/`client_secret` into the secrets above.
 - Private app = single firm, no Clio review needed. (See `docs/build-notes.md` §0/§6.)
 
@@ -109,9 +109,9 @@ Save. The connector is then available to every member — no one else has to add
    credentials and approves.
 3. Done — Claude now acts on that user's own Clio data, isolated from everyone else's.
 
-**Read-only by default.** The connector registers only the 13 read tools unless `CLIO_WRITE_SCOPE=all`
+**Read-only by default.** The connector registers only the 13 read tools unless `V1_WRITE_SCOPE=all`
 is set — the 8 write tools (create/update/complete) are not even advertised, so the model can't issue
-a write to Clio (intended or injection-driven). To enable writes: set `CLIO_WRITE_SCOPE=all` **and**
+a write to Clio (intended or injection-driven). To enable writes: set `V1_WRITE_SCOPE=all` **and**
 register the Clio app with read/write permissions (the app scope is the authoritative backstop;
 PRD §7). Even with writes on, users can disable individual tools in the connector's tool list and
 Clio's own per-user permissions still apply.
